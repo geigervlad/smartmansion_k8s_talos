@@ -1,0 +1,31 @@
+# Syncs the raw manifests in manifests/ (desec-webhook, ClusterIssuers, and
+# later the desec-token SealedSecret) — separate from application.yaml (the
+# cert-manager Helm chart itself) because these resources use cert-manager's
+# own CRDs and must be applied strictly after the chart, hence wave -4.
+#
+# repoURL below is already set to this project's GitHub repo. If you fork or
+# rename it, update GITOPS_REPO_URL in config/cluster.env and re-run
+# scripts/10-bootstrap-argocd-apps.sh, which re-templates every occurrence.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager-config
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-4"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/geigervlad/Smartmansion_k8s_talos.git
+    targetRevision: main
+    path: gitops/infrastructure/cert-manager/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

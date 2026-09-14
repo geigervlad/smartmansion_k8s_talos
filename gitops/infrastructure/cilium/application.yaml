@@ -1,0 +1,36 @@
+# Adopts the Cilium installation done by scripts/04-install-cilium.sh into
+# ArgoCD for ongoing GitOps management. Sync-wave -10: must reconcile before
+# anything else (it's the CNI; nothing else can schedule without it).
+#
+# repoURL below is already set to this project's GitHub repo. If you fork or
+# rename it, update GITOPS_REPO_URL in config/cluster.env and re-run
+# scripts/10-bootstrap-argocd-apps.sh, which re-templates every occurrence.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cilium
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+spec:
+  project: default
+  sources:
+    - repoURL: https://helm.cilium.io/
+      chart: cilium
+      targetRevision: 1.16.5
+      helm:
+        valueFiles:
+          - $values/gitops/infrastructure/cilium/values.yaml
+    - repoURL: https://github.com/geigervlad/Smartmansion_k8s_talos.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

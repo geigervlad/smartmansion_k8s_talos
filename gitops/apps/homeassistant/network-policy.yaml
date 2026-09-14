@@ -1,0 +1,21 @@
+# NOT authoritative for this app — written for documentation/intent only.
+# Home Assistant runs with hostNetwork: true (see deployment.yaml), which
+# uses the node's network namespace directly. Cilium's per-pod NetworkPolicy
+# enforcement is keyed to pod endpoint identity and does not apply to
+# host-networking pods unless Cilium's host firewall
+# (`--enable-host-firewall`) is turned on — it isn't here (see
+# gitops/infrastructure/cilium/values.yaml). Real isolation for this
+# workload is upstream, at the router/VLAN level.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: homeassistant-allow
+  namespace: homeassistant
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEntities:
+        - ingress
+    - fromEntities:
+        - world
+        - cluster

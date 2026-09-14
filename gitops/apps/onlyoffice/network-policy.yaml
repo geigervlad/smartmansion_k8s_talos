@@ -1,0 +1,18 @@
+# Mirrors gitops/apps/nextcloud/network-policy.yaml: default-deny ingress
+# except via the Cilium Ingress Controller, same-namespace traffic, and the
+# nextcloud namespace (WOPI callback traffic between the two apps).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: onlyoffice-allow
+  namespace: onlyoffice
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEntities:
+        - ingress
+    - fromEndpoints:
+        - {}
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: nextcloud

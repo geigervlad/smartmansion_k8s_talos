@@ -1,0 +1,37 @@
+# Adopts the cert-manager Helm release installed by
+# scripts/06-install-cert-manager.sh into ArgoCD. Sync-wave -5, alongside
+# sealed-secrets. The desec-webhook + ClusterIssuers live in manifests/ and
+# are synced by application-config.yaml at wave -4, since they need
+# cert-manager's CRDs (Issuer/Certificate) to already exist.
+#
+# repoURL below is already set to this project's GitHub repo. If you fork or
+# rename it, update GITOPS_REPO_URL in config/cluster.env and re-run
+# scripts/10-bootstrap-argocd-apps.sh, which re-templates every occurrence.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  project: default
+  sources:
+    - repoURL: https://charts.jetstack.io
+      chart: cert-manager
+      targetRevision: v1.16.2
+      helm:
+        valueFiles:
+          - $values/gitops/infrastructure/cert-manager/values.yaml
+    - repoURL: https://github.com/geigervlad/Smartmansion_k8s_talos.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

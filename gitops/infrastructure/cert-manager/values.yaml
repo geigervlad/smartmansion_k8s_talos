@@ -1,0 +1,11 @@
+# Helm values for the jetstack/cert-manager chart. Used both by
+# scripts/06-install-cert-manager.sh (bootstrap) and application.yaml
+# (ongoing GitOps management).
+installCRDs: true
+
+resources:
+  requests:
+    cpu: 20m
+    memory: 64Mi
+  limits:
+    memory: 128Mi

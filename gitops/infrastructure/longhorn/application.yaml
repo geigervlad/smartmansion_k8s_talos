@@ -1,0 +1,35 @@
+# Adopts the Longhorn installation done by scripts/07-install-longhorn.sh
+# into ArgoCD. Sync-wave -5, alongside sealed-secrets/cert-manager — no
+# ordering dependency between the three, all must be up before apps (wave 0).
+#
+# repoURL below is already set to this project's GitHub repo. If you fork or
+# rename it, update GITOPS_REPO_URL in config/cluster.env and re-run
+# scripts/10-bootstrap-argocd-apps.sh, which re-templates every occurrence.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: longhorn
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  project: default
+  sources:
+    - repoURL: https://charts.longhorn.io
+      chart: longhorn
+      targetRevision: 1.7.2
+      helm:
+        valueFiles:
+          - $values/gitops/infrastructure/longhorn/values.yaml
+    - repoURL: https://github.com/geigervlad/Smartmansion_k8s_talos.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: longhorn-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

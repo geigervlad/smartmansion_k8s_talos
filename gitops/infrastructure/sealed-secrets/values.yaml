@@ -1,0 +1,10 @@
+# Helm values for the bitnami-labs/sealed-secrets chart. Deliberately minimal
+# — defaults are fine for a homelab. Used both by
+# scripts/05-install-sealed-secrets.sh (bootstrap) and application.yaml
+# (ongoing GitOps management).
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 128Mi

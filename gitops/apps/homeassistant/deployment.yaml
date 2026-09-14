@@ -1,0 +1,119 @@
+# hostNetwork: true is required for mDNS/SSDP device discovery (HomeKit,
+# Chromecast, most IoT integrations) — Kubernetes' overlay pod network
+# doesn't pass multicast traffic through. This is also why the 6 VirtualBox
+# VMs use Bridged (not NAT) networking, see config/cluster.env /
+# scripts/01-create-vms.sh.
+#
+# Consequence (documented, not a bug): a hostNetwork pod uses the node's own
+# network namespace directly, so Cilium's normal per-pod NetworkPolicy
+# enforcement does NOT apply to it (see network-policy.yaml in this same
+# directory). Real isolation for this workload is the upstream router/VLAN
+# segmentation discussed when this project was scoped, not this cluster —
+# this app is deliberately the most privileged thing running here.
+#
+# No nodeSelector/nodeAffinity: any of the 3 worker nodes sees the same
+# bridged LAN, so it doesn't matter which one the scheduler picks; whichever
+# node it lands on serves HA on <node-ip>:8123 directly, in addition to
+# https://home.smartmansion.de via the Ingress below.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: homeassistant-config
+  namespace: homeassistant
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: homeassistant
+  namespace: homeassistant
+  labels:
+    app: homeassistant
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate   # ReadWriteOnce PVC — never run two pods against it at once
+  selector:
+    matchLabels:
+      app: homeassistant
+  template:
+    metadata:
+      labels:
+        app: homeassistant
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet   # keep using cluster DNS despite hostNetwork
+      containers:
+        - name: homeassistant
+          image: ghcr.io/home-assistant/home-assistant:stable
+          # No ports: block needed/effective under hostNetwork — the
+          # container listens on the node's real interface at 8123 directly.
+          volumeMounts:
+            - name: config
+              mountPath: /config
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 1536Mi
+          readinessProbe:
+            tcpSocket:
+              port: 8123
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 8123
+            initialDelaySeconds: 60
+            periodSeconds: 30
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: homeassistant-config
+---
+# Works transparently despite hostNetwork: the Service's endpoint is simply
+# the current node's IP:8123, and k8s updates it automatically if the pod
+# gets rescheduled to a different worker.
+apiVersion: v1
+kind: Service
+metadata:
+  name: homeassistant
+  namespace: homeassistant
+spec:
+  selector:
+    app: homeassistant
+  ports:
+    - port: 8123
+      targetPort: 8123
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: homeassistant
+  namespace: homeassistant
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-staging   # switch to letsencrypt-prod once validated, see docu/09-cert-manager-dns.md
+spec:
+  ingressClassName: cilium
+  tls:
+    - hosts:
+        - home.smartmansion.de
+      secretName: homeassistant-tls
+  rules:
+    - host: home.smartmansion.de
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: homeassistant
+                port:
+                  number: 8123

@@ -1,0 +1,29 @@
+# Raw manifests (no Helm chart — it's one CronJob), synced directly from
+# this directory. Sync-wave -5, alongside the other infrastructure pieces —
+# no ordering dependency on/from cert-manager, sealed-secrets or longhorn.
+#
+# repoURL below is already set to this project's GitHub repo. If you fork or
+# rename it, update GITOPS_REPO_URL in config/cluster.env and re-run
+# scripts/10-bootstrap-argocd-apps.sh, which re-templates every occurrence.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dyndns-updater
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/geigervlad/Smartmansion_k8s_talos.git
+    targetRevision: main
+    path: gitops/infrastructure/dyndns-updater
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dyndns-updater
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

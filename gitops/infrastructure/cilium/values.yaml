@@ -1,0 +1,39 @@
+# Helm values for the Cilium chart. Used both by scripts/04-install-cilium.sh
+# (bootstrap, before ArgoCD exists) and by gitops/infrastructure/cilium/application.yaml
+# (ongoing GitOps management) — single source of truth, no drift between the two.
+kubeProxyReplacement: true
+
+# Must match CLUSTER_VIP / port 6443 in config/cluster.env. Kept as a literal
+# here (not templated) since ArgoCD renders this file as-is — if you change
+# CLUSTER_VIP, update it in both places.
+k8sServiceHost: "192.168.178.55"
+k8sServicePort: 6443
+
+ipam:
+  mode: kubernetes
+
+# Talos mounts cgroupv2 itself; Cilium must not try to do it again.
+cgroup:
+  autoMount:
+    enabled: false
+  hostRoot: /sys/fs/cgroup
+
+# Built-in Ingress Controller so we don't need a separate nginx-ingress
+# component. Backs the Ingress resources used by Nextcloud/OnlyOffice/Home
+# Assistant (see gitops/apps/*).
+ingressController:
+  enabled: true
+  loadbalancerMode: shared
+  default: true
+
+hubble:
+  enabled: true
+  relay:
+    enabled: true
+  ui:
+    enabled: true
+
+# NetworkPolicy enforcement (see gitops/apps/*/network-policy.yaml). Note:
+# pods with hostNetwork:true (Home Assistant) bypass this — see
+# docu/03-cilium-networkpolicies.md.
+policyEnforcementMode: default

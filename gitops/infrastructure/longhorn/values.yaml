@@ -1,0 +1,23 @@
+# Helm values for the longhorn/longhorn chart. Used both by
+# scripts/07-install-longhorn.sh (bootstrap) and application.yaml (ongoing
+# GitOps management).
+defaultSettings:
+  defaultDataPath: /var/lib/longhorn   # matches the mount set up in talos/patches (see scripts/02-generate-talos-config.sh)
+  replicaAutoBalance: best-effort
+  # Only the 3 workers have the second "Longhorn disk" attached (see
+  # NODE_LONGHORN_DISK_GB in config/cluster.env) and the node label from
+  # talos/patches/worker.yaml — keep every Longhorn-managed component off
+  # the 3 control-plane nodes, which is doubly enforced by their default
+  # NoSchedule taint anyway.
+  systemManagedComponentsNodeSelector: "node.smartmansion.io/storage:longhorn"
+
+persistence:
+  defaultClassReplicaCount: 3   # one replica per worker = full redundancy across all 3 storage nodes
+
+longhornManager:
+  nodeSelector:
+    node.smartmansion.io/storage: "longhorn"
+
+longhornDriver:
+  nodeSelector:
+    node.smartmansion.io/storage: "longhorn"

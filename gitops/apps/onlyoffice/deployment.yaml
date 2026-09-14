@@ -1,0 +1,128 @@
+# ONLYOFFICE has no official Helm chart, so this is deployed as plain
+# manifests using the official onlyoffice/documentserver image. It bundles
+# its own PostgreSQL/RabbitMQ/Redis internally (fine at this scale — a
+# single homelab Nextcloud instance) — only its data/log/lib directories are
+# persisted, via one Longhorn PVC with subPath mounts.
+#
+# JWT_SECRET must match what Nextcloud's ONLYOFFICE connector app is
+# configured with — both come from the SAME generated value
+# (onlyoffice-jwt-secret / jwt-secret keys), see
+# scripts/09-generate-app-secrets.sh and docu/08-onlyoffice.md for the
+# one-time manual step that wires the two together.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: onlyoffice-data
+  namespace: onlyoffice
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: onlyoffice-documentserver
+  namespace: onlyoffice
+  labels:
+    app: onlyoffice-documentserver
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate   # ReadWriteOnce PVC — never run two pods against it at once
+  selector:
+    matchLabels:
+      app: onlyoffice-documentserver
+  template:
+    metadata:
+      labels:
+        app: onlyoffice-documentserver
+    spec:
+      containers:
+        - name: documentserver
+          image: onlyoffice/documentserver:8.2.2
+          ports:
+            - containerPort: 80
+              name: http
+          env:
+            - name: JWT_ENABLED
+              value: "true"
+            - name: JWT_HEADER
+              value: "Authorization"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: onlyoffice-secrets
+                  key: jwt-secret
+          volumeMounts:
+            - name: data
+              mountPath: /var/www/onlyoffice/Data
+              subPath: data
+            - name: data
+              mountPath: /var/log/onlyoffice
+              subPath: logs
+            - name: data
+              mountPath: /var/lib/onlyoffice
+              subPath: lib
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              memory: 2Gi
+          # Plain TCP checks rather than a guessed HTTP health path — verify
+          # against your image version and tighten if you want HTTP-level probes.
+          readinessProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: 60
+            periodSeconds: 30
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: onlyoffice-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: onlyoffice-documentserver
+  namespace: onlyoffice
+spec:
+  selector:
+    app: onlyoffice-documentserver
+  ports:
+    - port: 80
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: onlyoffice-documentserver
+  namespace: onlyoffice
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-staging   # switch to letsencrypt-prod once validated, see docu/09-cert-manager-dns.md
+spec:
+  ingressClassName: cilium
+  tls:
+    - hosts:
+        - office.smartmansion.de
+      secretName: onlyoffice-tls
+  rules:
+    - host: office.smartmansion.de
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: onlyoffice-documentserver
+                port:
+                  number: 80

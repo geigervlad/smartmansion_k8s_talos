@@ -1,0 +1,89 @@
+# Keeps Strato's A records pointed at this homelab's public IP, which
+# changes daily (see docu/09-cert-manager-dns.md — unrelated to the deSEC
+# DNS-01 setup, this is purely about the A records). Uses Strato's documented
+# dyndns2-style endpoint: https://dyndns.strato.com/nic/update?hostname=<host>
+# with HTTP basic auth. `myip` is deliberately omitted — Strato auto-detects
+# it from the connecting request's source IP, which (since this runs from
+# inside the homelab, behind the same router whose IP we're updating) is
+# exactly the IP we want, no separate "what's my IP" lookup needed.
+#
+# DYNDNS_UPDATE_URL / DYNDNS_HOSTNAMES / the schedule below are literal
+# copies of DYNDNS_UPDATE_URL / DYNDNS_HOSTNAMES / DYNDNS_INTERVAL_MINUTES in
+# config/cluster.env — keep both in sync if you change one.
+#
+# Credentials come from the "dyndns-strato-credentials" Secret, sealed by
+# scripts/09-generate-app-secrets.sh into dyndns-sealed-secret.yaml next to
+# this file (you provide the actual username/password from the Strato panel
+# — they can't be auto-generated). If your Strato package issues separate
+# DynDNS logins per subdomain rather than one for the whole domain, this
+# script needs adapting — see docu/09-cert-manager-dns.md.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dyndns-updater-script
+  namespace: dyndns-updater
+data:
+  update.sh: |
+    #!/bin/sh
+    set -eu
+    fail=0
+    for host in ${DYNDNS_HOSTNAMES}; do
+      echo "Updating ${host}..."
+      resp="$(curl -fsS -u "${STRATO_DYNDNS_USER}:${STRATO_DYNDNS_PASSWORD}" "${DYNDNS_UPDATE_URL}?hostname=${host}")" || { echo "  !! request failed for ${host}"; fail=1; continue; }
+      echo "  -> ${resp}"
+      case "${resp}" in
+        good\ *|nochg\ *) ;;
+        *) echo "  !! unexpected response for ${host}: ${resp}" >&2; fail=1 ;;
+      esac
+    done
+    exit "${fail}"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dyndns-updater
+  namespace: dyndns-updater
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: dyndns-updater
+              image: curlimages/curl:8.11.0
+              command: ["/bin/sh", "/scripts/update.sh"]
+              env:
+                - name: DYNDNS_UPDATE_URL
+                  value: "https://dyndns.strato.com/nic/update"
+                - name: DYNDNS_HOSTNAMES
+                  value: "smartmansion.de home.smartmansion.de office.smartmansion.de"
+                - name: STRATO_DYNDNS_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: dyndns-strato-credentials
+                      key: username
+                - name: STRATO_DYNDNS_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: dyndns-strato-credentials
+                      key: password
+              resources:
+                requests:
+                  cpu: 5m
+                  memory: 16Mi
+                limits:
+                  memory: 32Mi
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+          volumes:
+            - name: script
+              configMap:
+                name: dyndns-updater-script
+                defaultMode: 0555
