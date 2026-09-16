@@ -20,7 +20,7 @@ helm repo add jetstack https://charts.jetstack.io --force-update >/dev/null
 helm repo update jetstack >/dev/null
 
 helm upgrade --install cert-manager jetstack/cert-manager \
-  --version v1.16.2 \
+  --version v1.21.2 \
   --namespace "${CM_NAMESPACE}" --create-namespace \
   --kubeconfig "${KUBECONFIG_PATH}" \
   -f "${REPO_ROOT}/gitops/infrastructure/cert-manager/values.yaml" \

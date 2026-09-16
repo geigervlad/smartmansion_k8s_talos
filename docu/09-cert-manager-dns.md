@@ -82,8 +82,9 @@ dig NS _acme-challenge.smartmansion.de
 
 `scripts/09-generate-app-secrets.sh` will prompt for the deSEC API token (or
 read it from `secrets-vault/manual-credentials.env` if you pre-filled it) and
-seal it into
-`gitops/infrastructure/cert-manager/manifests/desec-token-sealed-secret.yaml`.
+seal it into `gitops/sealed-secrets/desec-token.yaml` (see
+[`05-sealed-secrets.md`](05-sealed-secrets.md) — every generated SealedSecret
+in this repo lives in that one folder, not next to the component it targets).
 Nothing else to do manually — the `letsencrypt-staging`/`letsencrypt-prod`
 ClusterIssuers (applied by `scripts/06-install-cert-manager.sh`) already
 reference that secret by name.

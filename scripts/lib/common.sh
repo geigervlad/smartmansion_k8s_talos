@@ -227,8 +227,14 @@ ensure_base_talos_config() {
   # only pass the flag when there's an actual patch to apply. Add it back
   # (`--config-patch-worker "@${REPO_ROOT}/talos/patches/worker.yaml"`) the
   # day worker.yaml gets real content.
+  #
+  # --kubernetes-version is passed explicitly (KUBERNETES_VERSION in
+  # config/cluster.env) rather than left to talosctl's own default, so a
+  # `talosctl` upgrade on the operator's machine can never silently change
+  # which Kubernetes version a from-scratch cluster gets.
   talosctl gen config "${CLUSTER_NAME}" "${CLUSTER_ENDPOINT}" \
     --output-dir "${TALOS_OUT_DIR_ABS}" \
+    --kubernetes-version "${KUBERNETES_VERSION}" \
     --config-patch "@${REPO_ROOT}/talos/patches/common.yaml" \
     --config-patch-control-plane "@${REPO_ROOT}/talos/patches/controlplane.yaml"
   log_info "Wrote controlplane.yaml, worker.yaml, talosconfig to ${TALOS_OUT_DIR_ABS}"

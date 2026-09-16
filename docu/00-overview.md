@@ -56,7 +56,8 @@ scripts/                 the numbered pipeline above, plus scripts/lib/common.sh
 talos/patches/           Talos machine config patches (checked in, no secrets)
 talos/_out/               generated per-node configs + cluster secrets (gitignored)
 gitops/bootstrap/         root-app.yaml — the one Application applied by hand
-gitops/infrastructure/    cilium, cert-manager, local-path-provisioner, sealed-secrets, dyndns-updater
+gitops/infrastructure/    cilium, cert-manager, local-path-provisioner, sealed-secrets (controller), dyndns-updater
+gitops/sealed-secrets/    every generated SealedSecret, one folder for all of them — see docu/05
 gitops/apps/              nextcloud, onlyoffice, homeassistant
 docu/                     you are here
 secrets-vault/            gitignored: raw secrets, key backups — never committed

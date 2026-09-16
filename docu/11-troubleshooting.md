@@ -337,6 +337,90 @@ Helm release**
   `directory.include` glob) and that it was actually pushed
   (`git log origin/main`, not just committed locally).
 
+## Version pins & Helm chart migration (2026-09)
+
+This project moved every component to the latest available *pinned* version
+(Talos v1.14.0/Kubernetes 1.37.0, Cilium 1.20.2, cert-manager v1.21.2, ArgoCD
+chart 10.9.1, SealedSecrets chart 2.20.0), switched Home Assistant from
+plain manifests to a Helm chart, and moved every generated SealedSecret into
+its own `gitops/sealed-secrets/` folder. A few non-obvious things came out
+of that — and a couple of dead ends worth recording so they don't get
+re-tried.
+
+**Bitnami is effectively gone — don't reach for `bitnami/*` charts or images
+at all, including as a bundled subchart dependency**
+- Broadcom's Bitnami changes went further than the earlier `bitnami/*` →
+  `bitnamilegacy/*` image migration (see the mariadb note below, kept for
+  history): as of late 2025, free Bitnami container images/charts were
+  discontinued outright, `bitnamilegacy/*` is a **frozen snapshot** (no tag
+  newer than ~August 28, 2025 for any image checked via the Docker Hub API —
+  `postgresql`, `redis`, `rabbitmq`, `mariadb`), and current Bitnami charts
+  additionally require `global.security.allowInsecureImages: true` just to
+  accept an image they can't verify a signature for. None of this is a
+  temporary rough patch to work around — it's the charts themselves going
+  away as a viable free option. **Don't use them, including indirectly**:
+  the `nextcloud/nextcloud` chart's bundled `postgresql`/`mariadb`/`redis`
+  subcharts are ALL Bitnami-sourced (`oci://registry-1.docker.io/
+  bitnamicharts`), so using them (even via the parent chart's own
+  `postgresql.enabled: true`) pulls in the same dead end. Fixed by disabling
+  all three bundled subcharts and running plain PostgreSQL/Valkey manifests
+  instead, wired in via `externalDatabase`/`externalRedis` — see
+  [`06-nextcloud.md`](06-nextcloud.md).
+- CloudNativePG (the modern, non-Bitnami, operator-based way to run Postgres
+  on Kubernetes) was considered and deliberately **not** used — adds an
+  operator + a `Cluster` CRD, real overkill for what is, here, a single
+  homelab Nextcloud instance with no HA requirement. A plain
+  `docker.io/library/postgres` StatefulSet is the whole database layer;
+  revisit CloudNativePG only if this cluster ever needs Postgres to survive
+  a node failure automatically.
+- **(History, already fixed once, left for context)** Before the wider
+  Bitnami discontinuation above, this project already hit the narrower
+  `bitnami/mariadb` → `bitnamilegacy/mariadb` image-404 issue in August
+  2025 and worked around it with a registry override — that fix is now
+  moot since MariaDB itself was dropped in favor of Postgres, but the same
+  *kind* of failure (a chart's default image reference 404ing without
+  warning) is exactly what pushed this project off Bitnami entirely rather
+  than chasing each new broken pin.
+
+**OnlyOffice: the "official" chart is a different, heavier product than the
+image this project actually wants to run**
+- `ONLYOFFICE/Kubernetes-Docs` (the one Helm chart ONLYOFFICE itself
+  publishes) deploys the *microservices* split — separate
+  `docservice`/`converter` pods — and needs an **external**
+  PostgreSQL/Redis/RabbitMQ; it does not support the all-in-one
+  `onlyoffice/documentserver` image this project actually runs (which
+  bundles its own internal Postgres/RabbitMQ/Redis in one container). No
+  community chart avoids this either (`suda/documentserver` wraps the same
+  microservices split). Tried adopting the official chart anyway once — it
+  worked, but meant standing up three more stateful services just to run
+  what is, here, a single Nextcloud editing backend, which is more
+  complexity than this project wants for that job. Reverted to plain
+  manifests (see [`08-onlyoffice.md`](08-onlyoffice.md)) — this is a
+  deliberate choice, not a sign no one looked for a chart.
+- **Lesson that generalizes beyond OnlyOffice, worth remembering if this
+  comes up again with a different component**: ArgoCD renders with `helm
+  template`, not `helm upgrade` — a chart default along the lines of
+  "leave this value empty and a random one will be generated, preserved
+  across upgrades" relies on Helm's `lookup` function against the live
+  cluster or `helm upgrade`'s own prior-release state, neither of which a
+  plain `helm template` render reliably has. Under ArgoCD, an unset value
+  like that can re-randomize on every sync/self-heal — for anything baked
+  into a Pod spec (an env var, a cookie/token value), that means an
+  unwanted pod restart on every single reconciliation. If a future chart
+  adoption hits this, the fix is the same every time: generate the value
+  once in `scripts/09-generate-app-secrets.sh`, seal it, and point the
+  chart's `existingSecret`-style field at it explicitly — never leave an
+  "auto-generate" default active for anything ArgoCD renders.
+
+**Every generated SealedSecret now lives in one folder,
+`gitops/sealed-secrets/`, not next to the component it targets**
+- See [`05-sealed-secrets.md`](05-sealed-secrets.md). Each file still sets
+  its own `metadata.namespace`, so this is purely an organizational change —
+  a new `sealed-secrets-data` Application (sync-wave `-4`) syncs the whole
+  folder. `cert-manager-config` moved from wave `-4` to `-3` to stay after
+  it (its ClusterIssuers reference the `desec-token` secret that used to
+  live next to them and now lives here instead).
+
 ## SealedSecrets
 
 **`scripts/05-install-sealed-secrets.sh` fails with `Error: no repositories

@@ -1,0 +1,91 @@
+# Plain Valkey for Nextcloud's transactional file locking / caching — Valkey
+# is the open-source, Linux-Foundation-governed fork of Redis (fully
+# Redis-protocol-compatible, so nextcloud/docker's own redis.config.php
+# default config works unchanged). Deliberately NOT Bitnami (see
+# docu/11-troubleshooting.md). A cache, not a system of record — if this
+# pod's data is ever lost, Nextcloud just rebuilds it, so this is a plain
+# Deployment + PVC, not a StatefulSet.
+#
+# REDIS_PASSWORD below comes from the SAME "nextcloud-secrets" SealedSecret
+# (redis-password key) that gitops/apps/nextcloud/values.yaml's
+# externalRedis.existingSecret points Nextcloud itself at.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nextcloud-redis-data
+  namespace: nextcloud
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 4Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nextcloud-redis
+  namespace: nextcloud
+  labels:
+    app: nextcloud-redis
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate   # ReadWriteOnce PVC — never run two pods against it at once
+  selector:
+    matchLabels:
+      app: nextcloud-redis
+  template:
+    metadata:
+      labels:
+        app: nextcloud-redis
+    spec:
+      containers:
+        - name: valkey
+          image: valkey/valkey:9.1.2-alpine
+          command: ["sh", "-c", "exec valkey-server --requirepass \"$REDIS_PASSWORD\" --appendonly yes --dir /data"]
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nextcloud-secrets
+                  key: redis-password
+          ports:
+            - containerPort: 6379
+              name: valkey
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              memory: 256Mi
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "valkey-cli -a \"$REDIS_PASSWORD\" --no-auth-warning ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "valkey-cli -a \"$REDIS_PASSWORD\" --no-auth-warning ping"]
+            initialDelaySeconds: 15
+            periodSeconds: 20
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: nextcloud-redis-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nextcloud-redis
+  namespace: nextcloud
+spec:
+  selector:
+    app: nextcloud-redis
+  ports:
+    - port: 6379
+      targetPort: valkey

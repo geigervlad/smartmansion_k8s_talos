@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # The one place that collects/generates every secret this repo needs and
-# seals each into the gitops/ tree as a SealedSecret — safe to commit, only
-# decryptable by the SealedSecrets controller running in this specific
-# cluster (see scripts/05-install-sealed-secrets.sh).
+# seals each into gitops/sealed-secrets/ as a SealedSecret — safe to commit,
+# only decryptable by the SealedSecrets controller running in this specific
+# cluster (see scripts/05-install-sealed-secrets.sh). Every generated
+# SealedSecret lives in that one folder regardless of which namespace it
+# targets — see gitops/sealed-secrets/application.yaml.
 #
 # Two kinds of secret:
 #   - Manually-provided (deSEC API token, Strato DynDNS login): can't be
@@ -20,7 +22,8 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 VAULT="${REPO_ROOT}/secrets-vault"
 CREDS_FILE="${VAULT}/manual-credentials.env"
 APP_SECRETS_FILE="${VAULT}/app-secrets.env"
-mkdir -p "${VAULT}"
+SEALED_SECRETS_DIR="${REPO_ROOT}/gitops/sealed-secrets"
+mkdir -p "${VAULT}" "${SEALED_SECRETS_DIR}"
 
 [[ -s "${PUB_CERT_PATH}" ]] || die "Missing ${PUB_CERT_PATH} — run ./scripts/05-install-sealed-secrets.sh first."
 
@@ -50,21 +53,21 @@ chmod 600 "${CREDS_FILE}"
 
 log_step "Sealing infrastructure credentials"
 
-DESEC_SECRET_OUT="${REPO_ROOT}/gitops/infrastructure/cert-manager/manifests/desec-token-sealed-secret.yaml"
+DESEC_SECRET_OUT="${SEALED_SECRETS_DIR}/desec-token.yaml"
 if file_exists_nonempty "${DESEC_SECRET_OUT}"; then
   log_info "desec-token SealedSecret already exists, skipping."
 else
   seal_secret_literals desec-token cert-manager "${DESEC_SECRET_OUT}" -- "token=${DESEC_API_TOKEN}"
-  log_info "Wrote gitops/infrastructure/cert-manager/manifests/desec-token-sealed-secret.yaml"
+  log_info "Wrote gitops/sealed-secrets/desec-token.yaml"
 fi
 
-DYNDNS_SECRET_OUT="${REPO_ROOT}/gitops/infrastructure/dyndns-updater/dyndns-sealed-secret.yaml"
+DYNDNS_SECRET_OUT="${SEALED_SECRETS_DIR}/dyndns-strato-credentials.yaml"
 if file_exists_nonempty "${DYNDNS_SECRET_OUT}"; then
   log_info "dyndns-strato-credentials SealedSecret already exists, skipping."
 else
   seal_secret_literals dyndns-strato-credentials dyndns-updater "${DYNDNS_SECRET_OUT}" -- \
     "username=${STRATO_DYNDNS_USER}" "password=${STRATO_DYNDNS_PASSWORD}"
-  log_info "Wrote gitops/infrastructure/dyndns-updater/dyndns-sealed-secret.yaml"
+  log_info "Wrote gitops/sealed-secrets/dyndns-strato-credentials.yaml"
 fi
 
 log_step "Generating app secrets"
@@ -75,8 +78,8 @@ generate_once() {
   grep -q "^${var}=" "${APP_SECRETS_FILE}" 2>/dev/null || echo "${var}=$(random_password "${len}")" >> "${APP_SECRETS_FILE}"
 }
 generate_once NEXTCLOUD_ADMIN_PASSWORD
-generate_once NEXTCLOUD_DB_ROOT_PASSWORD
-generate_once NEXTCLOUD_DB_PASSWORD
+generate_once NEXTCLOUD_DB_PASSWORD   # the "nextcloud" postgres user's own password — see gitops/apps/nextcloud/postgresql.yaml (plain postgres, no separate superuser account)
+generate_once NEXTCLOUD_REDIS_PASSWORD
 generate_once ONLYOFFICE_JWT_SECRET 32
 chmod 600 "${APP_SECRETS_FILE}"
 # shellcheck disable=SC1090
@@ -84,32 +87,34 @@ source "${APP_SECRETS_FILE}"
 
 log_step "Sealing app secrets"
 
-# Single secret shared by the nextcloud/nextcloud chart's own
-# existingSecret (nextcloud-username/nextcloud-password keys) and its bundled
-# mariadb subchart's existingSecret (mariadb-root-password/mariadb-password
-# keys) — see gitops/apps/nextcloud/values.yaml. onlyoffice-jwt-secret is
-# extra data for the one-time manual OnlyOffice connector setup documented in
-# docu/08-onlyoffice.md, not read by the Helm chart itself.
-NEXTCLOUD_SECRET_OUT="${REPO_ROOT}/gitops/apps/nextcloud/sealed-secret.yaml"
+# Single secret with three consumers: the nextcloud/nextcloud chart's own
+# existingSecret (nextcloud-username/nextcloud-password), its
+# externalDatabase.existingSecret (db-username/db-password, read by BOTH the
+# Nextcloud pod and the plain postgres StatefulSet in
+# gitops/apps/nextcloud/postgresql.yaml), and its externalRedis.existingSecret
+# (redis-password, read by BOTH the Nextcloud pod and the plain valkey
+# Deployment in gitops/apps/nextcloud/redis.yaml) — see
+# gitops/apps/nextcloud/values.yaml.
+NEXTCLOUD_SECRET_OUT="${SEALED_SECRETS_DIR}/nextcloud-secrets.yaml"
 if file_exists_nonempty "${NEXTCLOUD_SECRET_OUT}"; then
-  log_info "nextcloud SealedSecret already exists, skipping."
+  log_info "nextcloud-secrets SealedSecret already exists, skipping."
 else
   seal_secret_literals nextcloud-secrets nextcloud "${NEXTCLOUD_SECRET_OUT}" -- \
     "nextcloud-username=admin" \
     "nextcloud-password=${NEXTCLOUD_ADMIN_PASSWORD}" \
-    "mariadb-root-password=${NEXTCLOUD_DB_ROOT_PASSWORD}" \
-    "mariadb-password=${NEXTCLOUD_DB_PASSWORD}" \
-    "onlyoffice-jwt-secret=${ONLYOFFICE_JWT_SECRET}"
-  log_info "Wrote gitops/apps/nextcloud/sealed-secret.yaml"
+    "db-username=nextcloud" \
+    "db-password=${NEXTCLOUD_DB_PASSWORD}" \
+    "redis-password=${NEXTCLOUD_REDIS_PASSWORD}"
+  log_info "Wrote gitops/sealed-secrets/nextcloud-secrets.yaml"
 fi
 
-ONLYOFFICE_SECRET_OUT="${REPO_ROOT}/gitops/apps/onlyoffice/sealed-secret.yaml"
+ONLYOFFICE_SECRET_OUT="${SEALED_SECRETS_DIR}/onlyoffice-secrets.yaml"
 if file_exists_nonempty "${ONLYOFFICE_SECRET_OUT}"; then
-  log_info "onlyoffice SealedSecret already exists, skipping."
+  log_info "onlyoffice-secrets SealedSecret already exists, skipping."
 else
   seal_secret_literals onlyoffice-secrets onlyoffice "${ONLYOFFICE_SECRET_OUT}" -- \
     "jwt-secret=${ONLYOFFICE_JWT_SECRET}"
-  log_info "Wrote gitops/apps/onlyoffice/sealed-secret.yaml"
+  log_info "Wrote gitops/sealed-secrets/onlyoffice-secrets.yaml"
 fi
 
 log_warn "Raw values are in secrets-vault/app-secrets.env and secrets-vault/manual-credentials.env (both gitignored)."

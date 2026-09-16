@@ -15,7 +15,7 @@ helm repo add argo https://argoproj.github.io/argo-helm --force-update >/dev/nul
 helm repo update argo >/dev/null
 
 helm upgrade --install "${ARGOCD_RELEASE}" argo/argo-cd \
-  --version 7.7.11 \
+  --version 10.9.1 \
   --namespace "${ARGOCD_NAMESPACE}" --create-namespace \
   --kubeconfig "${KUBECONFIG_PATH}" \
   -f "${REPO_ROOT}/gitops/infrastructure/argocd/values.yaml" \

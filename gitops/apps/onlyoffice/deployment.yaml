@@ -1,14 +1,18 @@
-# ONLYOFFICE has no official Helm chart, so this is deployed as plain
-# manifests using the official onlyoffice/documentserver image. It bundles
-# its own PostgreSQL/RabbitMQ/Redis internally (fine at this scale — a
-# single homelab Nextcloud instance) — only its data/log/lib directories are
-# persisted, via one local-path PVC with subPath mounts.
+# ONLYOFFICE has no Helm chart that fits without pulling in an external
+# PostgreSQL/Redis/RabbitMQ: the *official* ONLYOFFICE/Kubernetes-Docs chart
+# only wraps the microservices split (separate docservice/converter pods),
+# which needs those three services externally. This project deliberately
+# doesn't want that for OnlyOffice (see docu/11-troubleshooting.md) — this
+# stays plain manifests using the official onlyoffice/documentserver image,
+# which bundles its own internal PostgreSQL/RabbitMQ/Redis (fine at this
+# scale — a single homelab Nextcloud instance) — only its data/log/lib
+# directories are persisted, via one local-path PVC with subPath mounts.
 #
 # JWT_SECRET must match what Nextcloud's ONLYOFFICE connector app is
 # configured with — both come from the SAME generated value
-# (onlyoffice-jwt-secret / jwt-secret keys), see
-# scripts/09-generate-app-secrets.sh and docu/08-onlyoffice.md for the
-# one-time manual step that wires the two together.
+# (jwt-secret key), see scripts/09-generate-app-secrets.sh and
+# docu/08-onlyoffice.md for the one-time manual step that wires the two
+# together.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -43,7 +47,7 @@ spec:
     spec:
       containers:
         - name: documentserver
-          image: onlyoffice/documentserver:8.2.2
+          image: onlyoffice/documentserver:9.4.0.1
           ports:
             - containerPort: 80
               name: http

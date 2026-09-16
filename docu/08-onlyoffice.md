@@ -1,9 +1,27 @@
 # OnlyOffice
 
-Deployed as plain manifests (no official Helm chart exists) — see
+Deployed as plain manifests — see
 [`gitops/apps/onlyoffice/deployment.yaml`](../gitops/apps/onlyoffice/deployment.yaml).
-Image `onlyoffice/documentserver:8.2.2`. It's not meant to be used directly;
-it's the editing backend Nextcloud's ONLYOFFICE connector app calls into.
+Image `onlyoffice/documentserver:9.4.0.1`. It's not meant to be used
+directly; it's the editing backend Nextcloud's ONLYOFFICE connector app
+calls into.
+
+## Why not a chart
+
+The *official* `ONLYOFFICE/Kubernetes-Docs` Helm chart exists, but it wraps
+a different, heavier product shape: the microservices split (separate
+`docservice`/`converter` pods), which needs an **external**
+PostgreSQL/Redis/RabbitMQ — three more services to run for what is, here,
+just the editing backend for one Nextcloud instance. This project
+deliberately doesn't want that (see
+[`11-troubleshooting.md`](11-troubleshooting.md) for the full reasoning).
+No community chart avoids this either — the ones that exist (e.g.
+`suda/documentserver`) wrap the *same* microservices architecture.
+
+Plain manifests using the official `onlyoffice/documentserver` **all-in-one**
+image sidestep the whole problem: it bundles its own internal
+PostgreSQL/RabbitMQ/Redis inside the one container, nothing external needed
+at this scale.
 
 ## What's configured
 
@@ -11,8 +29,12 @@ it's the editing backend Nextcloud's ONLYOFFICE connector app calls into.
   Document Server's data/log/lib directories — it bundles its own
   PostgreSQL/RabbitMQ/Redis internally, nothing external needed at this scale.
 - `JWT_ENABLED=true` with `JWT_SECRET` from the `onlyoffice-secrets`
-  SealedSecret (`jwt-secret` key) — without this, anyone who can reach
-  `office.smartmansion.de` could ask it to render arbitrary documents.
+  SealedSecret (`jwt-secret` key, in
+  [`gitops/sealed-secrets/`](../gitops/sealed-secrets/) — see
+  [`05-sealed-secrets.md`](05-sealed-secrets.md) for why generated secrets
+  live in that one folder instead of next to OnlyOffice itself) — without
+  this, anyone who can reach `office.smartmansion.de` could ask it to render
+  arbitrary documents.
 - Ingress at `office.smartmansion.de`.
 
 ## Connecting it to Nextcloud (one-time manual step)

@@ -1,16 +1,20 @@
 # The single "app of apps" — this is the only Application ever applied by
 # hand (scripts/10-bootstrap-argocd-apps.sh does it once via `kubectl
 # apply`). It recursively watches gitops/ for every other Application
-# manifest (cilium, cert-manager, local-path-provisioner, sealed-secrets, dyndns-updater,
-# nextcloud, onlyoffice, homeassistant) and keeps them in sync — that's the
-# entire GitOps bootstrap.
+# manifest (cilium, cert-manager (+ its config), local-path-provisioner,
+# sealed-secrets (the controller) + sealed-secrets-data (every generated
+# SealedSecret, see gitops/sealed-secrets/), dyndns-updater, nextcloud,
+# onlyoffice, homeassistant) and keeps them in sync — that's the entire
+# GitOps bootstrap.
 #
-# `include: "**/application*.yaml"` deliberately matches ONLY files named
-# application.yaml / application-config.yaml, so it picks up exactly the
-# Application manifests colocated with each component and ignores their
-# values.yaml / namespace.yaml / sealed-secret.yaml / raw manifests (those
-# are synced by the child Applications themselves, into their own
-# destinations, not by this root app).
+# `include: "**/application*.yaml"` deliberately matches every file named
+# application.yaml / application-config.yaml / application-<name>.yaml, so
+# it picks up exactly the Application manifests colocated with each
+# component and ignores their values.yaml / namespace.yaml /
+# sealed-secret*.yaml / raw manifests (those are synced by the child
+# Applications themselves, into their own destinations, not by this root
+# app — each such directory's own Application excludes these same
+# application*.yaml files from its directory-sync source for that reason).
 #
 # repoURL below is already set to this project's GitHub repo. If you fork or
 # rename it, update GITOPS_REPO_URL in config/cluster.env and re-run

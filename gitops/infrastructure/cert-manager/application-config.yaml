@@ -1,7 +1,11 @@
-# Syncs the raw manifests in manifests/ (desec-webhook, ClusterIssuers, and
-# later the desec-token SealedSecret) — separate from application.yaml (the
-# cert-manager Helm chart itself) because these resources use cert-manager's
-# own CRDs and must be applied strictly after the chart, hence wave -4.
+# Syncs the raw manifests in manifests/ (desec-webhook, ClusterIssuers) —
+# separate from application.yaml (the cert-manager Helm chart itself)
+# because these resources use cert-manager's own CRDs and must be applied
+# strictly after the chart. Wave -3: after gitops/sealed-secrets (wave -4),
+# since the ClusterIssuers reference the desec-token Secret that lives
+# there now (see gitops/sealed-secrets/application.yaml) — the desec-token
+# SealedSecret used to live in manifests/ next to this file, moved out so
+# every generated secret lives in one place.
 #
 # repoURL below is already set to this project's GitHub repo. If you fork or
 # rename it, update GITOPS_REPO_URL in config/cluster.env and re-run
@@ -12,7 +16,7 @@ metadata:
   name: cert-manager-config
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "-4"
+    argocd.argoproj.io/sync-wave: "-3"
 spec:
   project: default
   source:

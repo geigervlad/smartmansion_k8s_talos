@@ -8,6 +8,11 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 
 SS_NAMESPACE="sealed-secrets"
 SS_RELEASE="sealed-secrets"
+SS_CHART_VERSION="2.20.0"   # keep in sync with gitops/infrastructure/sealed-secrets/application.yaml.
+                            # https://bitnami.github.io/sealed-secrets is the project's own official
+                            # repo (github.com/bitnami/sealed-secrets, not a random third party) — the
+                            # chart uses its own 1.x/2.x versioning scheme, independent of the
+                            # controller's 0.x version it ships (see chart README).
 
 log_step "Installing SealedSecrets controller"
 
@@ -15,6 +20,7 @@ helm repo add sealed-secrets https://bitnami.github.io/sealed-secrets --force-up
 helm repo update sealed-secrets >/dev/null
 
 helm upgrade --install "${SS_RELEASE}" sealed-secrets/sealed-secrets \
+  --version "${SS_CHART_VERSION}" \
   --namespace "${SS_NAMESPACE}" --create-namespace \
   --kubeconfig "${KUBECONFIG_PATH}" \
   -f "${REPO_ROOT}/gitops/infrastructure/sealed-secrets/values.yaml" \

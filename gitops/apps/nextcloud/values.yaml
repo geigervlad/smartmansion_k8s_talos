@@ -1,7 +1,13 @@
 # Helm values for the nextcloud/nextcloud chart (https://nextcloud.github.io/helm/).
-# Secret keys referenced below (nextcloud-username/-password,
-# mariadb-root-password/-password) are sealed by
-# scripts/09-generate-app-secrets.sh into sealed-secret.yaml next to this file
+# PostgreSQL and Redis are NOT the chart's bundled subcharts (those are all
+# Bitnami-sourced, and Bitnami's free images/charts were effectively
+# discontinued in 2025 — see docu/11-troubleshooting.md) — instead both run
+# as plain manifests in this same directory (postgresql.yaml, redis.yaml),
+# and the chart is pointed at them via externalDatabase/externalRedis.
+#
+# Secret keys referenced below (nextcloud-username/-password, db-username,
+# db-password, redis-password) are sealed by
+# scripts/09-generate-app-secrets.sh into gitops/sealed-secrets/nextcloud-secrets.yaml
 # — see that script for exactly which keys exist in "nextcloud-secrets".
 nextcloud:
   host: smartmansion.de
@@ -21,30 +27,47 @@ phpClientHttpsFix:
   protocol: https
 
 internalDatabase:
-  enabled: false   # using the bundled mariadb subchart instead
+  enabled: false
 
+# Chart's bundled subcharts — all Bitnami, not used (see comment above).
 mariadb:
+  enabled: false
+postgresql:
+  enabled: false
+redis:
+  enabled: false
+
+##
+## External PostgreSQL — plain postgres:18 container (postgresql.yaml in
+## this directory), not a Bitnami subchart. Single instance, ReadWriteOnce
+## PVC: a homelab database, not something that needs an HA operator.
+##
+externalDatabase:
   enabled: true
-  # Broadcom moved almost all bitnami/* images to bitnamilegacy/* on Docker
-  # Hub in August 2025 (commercial "Bitnami Secure Images" push) — the
-  # chart's default image reference (docker.io/bitnami/mariadb) 404s as a
-  # result. bitnamilegacy/* is an unmaintained archive (same tags, frozen,
-  # no further updates) — fine short-term, but if this breaks again later,
-  # that's why: check https://github.com/bitnami/charts/issues/35164 and
-  # consider pinning to a self-hosted mirror or switching to a
-  # non-Bitnami MariaDB image entirely.
-  image:
-    registry: docker.io
-    repository: bitnamilegacy/mariadb
-  auth:
-    database: nextcloud
-    username: nextcloud
-    existingSecret: nextcloud-secrets
-  primary:
-    persistence:
-      enabled: true
-      storageClass: local-path
-      size: 20Gi
+  type: postgresql
+  host: nextcloud-postgresql
+  database: nextcloud
+  existingSecret:
+    enabled: true
+    secretName: nextcloud-secrets
+    usernameKey: db-username
+    passwordKey: db-password
+
+##
+## External Redis — plain valkey (open-source Redis fork, Linux Foundation
+## governed) container (redis.yaml in this directory), not a Bitnami
+## subchart. Used by Nextcloud for transactional file locking and
+## APCu-adjacent caching (redis.config.php, a default config in the
+## nextcloud/docker image, auto-wires this once externalRedis.enabled is
+## true; see https://github.com/nextcloud/docker).
+##
+externalRedis:
+  enabled: true
+  host: nextcloud-redis
+  existingSecret:
+    enabled: true
+    secretName: nextcloud-secrets
+    passwordKey: redis-password
 
 persistence:
   enabled: true

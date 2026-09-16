@@ -1,0 +1,53 @@
+# Helm values for the pajikos/home-assistant chart
+# (https://pajikos.github.io/home-assistant-helm-chart/) — the most actively
+# maintained community chart for Home Assistant (no official one exists; HA
+# itself doesn't publish one). Auto-releases a new chart version alongside
+# every upstream Home Assistant release, chart version pinned in
+# application.yaml.
+replicaCount: 1
+
+image:
+  tag: "2026.9.2"   # pin explicitly rather than trust the chart's own appVersion default
+
+# hostNetwork: true is required for mDNS/SSDP device discovery (HomeKit,
+# Chromecast, most IoT integrations) — Kubernetes' overlay pod network
+# doesn't pass multicast traffic through. This is also why the 6 VirtualBox
+# VMs use Bridged (not NAT) networking, see config/cluster.env /
+# scripts/01-create-vms.sh.
+#
+# Consequence (documented, not a bug): a hostNetwork pod uses the node's own
+# network namespace directly, so Cilium's normal per-pod NetworkPolicy
+# enforcement does NOT apply to it (see network-policy.yaml in this same
+# directory). Real isolation for this workload is the upstream router/VLAN
+# segmentation discussed when this project was scoped, not this cluster —
+# this app is deliberately the most privileged thing running here.
+hostNetwork: true
+dnsPolicy: ClusterFirstWithHostNet   # keep using cluster DNS despite hostNetwork
+
+persistence:
+  enabled: true
+  storageClass: local-path
+  size: 10Gi
+  accessMode: ReadWriteOnce
+
+ingress:
+  enabled: true
+  className: cilium
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-staging   # switch to letsencrypt-prod once validated, see docu/09-cert-manager-dns.md
+  hosts:
+    - host: home.smartmansion.de
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: homeassistant-tls
+      hosts:
+        - home.smartmansion.de
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    memory: 1536Mi

@@ -8,7 +8,7 @@
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 
-CILIUM_VERSION="1.16.5"   # keep in sync with gitops/infrastructure/cilium/application.yaml
+CILIUM_VERSION="1.20.2"   # keep in sync with gitops/infrastructure/cilium/application.yaml
 CILIUM_NAMESPACE="kube-system"
 
 log_step "Installing Cilium CNI"

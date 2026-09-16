@@ -1,0 +1,96 @@
+# Plain PostgreSQL for Nextcloud — the official docker.io/library/postgres
+# image directly, no chart, no operator. Deliberately NOT Bitnami (see
+# docu/11-troubleshooting.md) and deliberately NOT an HA operator like
+# CloudNativePG: this is a single homelab Nextcloud instance, not a system
+# that needs automatic failover — one StatefulSet, one PVC, same "radically
+# simpler" pattern already used for local-path-provisioner in this repo.
+#
+# POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_DB below come from the SAME
+# "nextcloud-secrets" SealedSecret (db-username/db-password keys) that
+# gitops/apps/nextcloud/values.yaml's externalDatabase.existingSecret
+# points Nextcloud itself at — one secret, two consumers, so they can never
+# drift out of sync with each other.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nextcloud-postgresql
+  namespace: nextcloud
+spec:
+  serviceName: nextcloud-postgresql
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nextcloud-postgresql
+  template:
+    metadata:
+      labels:
+        app: nextcloud-postgresql
+    spec:
+      containers:
+        - name: postgresql
+          image: postgres:18.6-alpine
+          env:
+            - name: POSTGRES_DB
+              value: nextcloud
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: nextcloud-secrets
+                  key: db-username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nextcloud-secrets
+                  key: db-password
+            # Subdirectory, not the mount root itself — postgres refuses to
+            # initdb into a non-empty directory, and the volume root always
+            # has a lost+found dir on a fresh local-path PVC.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+              name: postgresql
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 768Mi
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            initialDelaySeconds: 30
+            periodSeconds: 20
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 20Gi
+---
+# Headless (clusterIP: None) — required by StatefulSet's spec.serviceName,
+# and gives the single pod a stable DNS name either way.
+apiVersion: v1
+kind: Service
+metadata:
+  name: nextcloud-postgresql
+  namespace: nextcloud
+spec:
+  clusterIP: None
+  selector:
+    app: nextcloud-postgresql
+  ports:
+    - port: 5432
+      targetPort: postgresql

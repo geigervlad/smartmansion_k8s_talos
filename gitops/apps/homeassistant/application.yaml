@@ -1,7 +1,8 @@
-# No Helm chart used (plain Deployment is simpler and more transparent for a
-# single hostNetwork pod) — directory sync of every manifest in this folder
-# except this file itself (already applied at the argocd-namespace level by
-# gitops/bootstrap/root-app.yaml).
+# Deployed via the pajikos/home-assistant Helm chart (see values.yaml for
+# why) — multi-source Application, same pattern as nextcloud: the chart
+# itself, this directory's values.yaml as a separate $values ref, and this
+# directory again (minus this file and values.yaml) synced as raw manifests
+# for namespace.yaml/network-policy.yaml, which the chart doesn't manage.
 #
 # repoURL below is already set to this project's GitHub repo. If you fork or
 # rename it, update GITOPS_REPO_URL in config/cluster.env and re-run
@@ -13,12 +14,21 @@ metadata:
   namespace: argocd
 spec:
   project: default
-  source:
-    repoURL: https://github.com/geigervlad/Smartmansion_k8s_talos.git
-    targetRevision: main
-    path: gitops/apps/homeassistant
-    directory:
-      exclude: "application.yaml"
+  sources:
+    - repoURL: https://pajikos.github.io/home-assistant-helm-chart/
+      chart: home-assistant
+      targetRevision: 0.3.81
+      helm:
+        valueFiles:
+          - $values/gitops/apps/homeassistant/values.yaml
+    - repoURL: https://github.com/geigervlad/Smartmansion_k8s_talos.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/geigervlad/Smartmansion_k8s_talos.git
+      targetRevision: main
+      path: gitops/apps/homeassistant
+      directory:
+        exclude: "{values.yaml,application.yaml}"
   destination:
     server: https://kubernetes.default.svc
     namespace: homeassistant
