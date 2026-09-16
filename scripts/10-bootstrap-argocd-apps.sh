@@ -20,7 +20,13 @@ done < <(grep -rlZ '__GITOPS_REPO_URL__' "${REPO_ROOT}/gitops" 2>/dev/null || tr
 cd "${REPO_ROOT}"
 
 log_step "Staging changes"
-git add -A -- . ':!secrets-vault' ':!kubeconfig' ':!talosconfig' ':!talos/_out'
+# Plain `-A`, not exclude pathspecs (`:!path`) — those don't reliably
+# suppress git's "paths are ignored by .gitignore" advisory/error across git
+# versions, confirmed to actually make this script exit instead of just
+# skipping the gitignored paths as intended. .gitignore already correctly
+# lists secrets-vault/, kubeconfig, talosconfig, talos/_out/ — plain `-A`
+# skips gitignored paths on its own, no exclusion pathspec needed at all.
+git add -A
 git status --short
 
 if git diff --cached --quiet; then
