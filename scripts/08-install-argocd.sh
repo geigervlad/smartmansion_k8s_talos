@@ -11,7 +11,7 @@ ARGOCD_RELEASE="argocd"
 
 log_step "Installing ArgoCD"
 
-helm repo add argo https://argoproj.github.io/argo-helm >/dev/null 2>&1 || true
+helm repo add argo https://argoproj.github.io/argo-helm --force-update >/dev/null
 helm repo update argo >/dev/null
 
 helm upgrade --install "${ARGOCD_RELEASE}" argo/argo-cd \

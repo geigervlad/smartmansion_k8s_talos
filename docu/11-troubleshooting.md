@@ -192,13 +192,64 @@ yet valid"**
   that shouldn't be there, or a kubelet that never registered.
 - `talosctl --talosconfig talosconfig -n <ip> logs kubelet`
 
-**Longhorn shows a node/disk unhealthy**
-- Confirm the second VirtualBox disk actually exists for that VM and shows
-  up as `/dev/sdb` — `talosctl --talosconfig talosconfig -n <ip> get disks`.
-  If it's a different device name, fix the assumption in
-  `scripts/02-generate-talos-config.sh` (`render_node_config`) and re-apply
-  that node's config.
-- `kubectl --kubeconfig kubeconfig -n longhorn-system get nodes.longhorn.io -o yaml`
+**Why local-path-provisioner instead of Longhorn**
+- This project used Longhorn originally, then switched. Longhorn's whole
+  value proposition is replicating data *across nodes* — but every node
+  here is a VM on the *same single physical machine*
+  ([`01-architecture.md`](01-architecture.md)), so it only protects against
+  a Talos VM/OS crash, not the dominant real failure mode (that one
+  machine's disk or power). Meanwhile it costs ~20+ base pods plus 3 extra
+  replica pods per volume (`defaultClassReplicaCount: 3`) — confirmed to
+  add up to 27 pods across just 3 worker nodes before any app was even
+  deployed. local-path-provisioner: one controller pod, plain directories
+  on the node's local disk, no replication, no CSI complexity. Trade-off
+  accepted: a PVC's data is pinned to whichever node it was first created
+  on — no live migration, no snapshots, no built-in backup.
+- The second VirtualBox disk / Talos `UserVolumeConfig` mount this uses is
+  still named/labeled "longhorn" (deliberately not renamed — see
+  [`02-talos-setup.md`](02-talos-setup.md)). If PVCs won't bind, first
+  confirm that disk actually exists and shows up as `/dev/sdb` —
+  `talosctl --talosconfig talosconfig -n <ip> get disks`. If it's a
+  different device name, fix the assumption in `render_node_config_file()`
+  in `scripts/lib/common.sh` and re-apply that node's config.
+- `kubectl --kubeconfig kubeconfig -n local-path-storage get pods` — the
+  provisioner itself; `kubectl describe pvc -n <ns> <pvc>` for a specific
+  stuck volume's events.
+
+**Pods `forbidden: violates PodSecurity "baseline:latest"` — a
+DaemonSet/Deployment stuck with `FailedCreate` events, or any pod needing
+`hostPath`/`hostNetwork`/`privileged`**
+- Confirmed real Talos platform default, not a bug: Talos enables the
+  Kubernetes PodSecurity admission controller with **`baseline`
+  enforcement by default for every namespace except `kube-system`**.
+  Baseline forbids privileged containers, hostPath volumes, and host
+  namespaces (`hostNetwork`/`hostPID`/`hostIPC`) outright — the daemonset/
+  deployment controller keeps retrying pod creation forever (visible as
+  repeated `FailedCreate` events over many minutes), it never just fails
+  fast, which is what makes this easy to mistake for a hang or a timeout
+  that just needs a longer `--wait`.
+- Confirmed to affect: local-path-provisioner's per-PV "helper pod" (a
+  short-lived Job that `mkdir`/`rm`'s the hostPath directory for each
+  volume — see
+  [`gitops/infrastructure/local-path-provisioner/manifests.yaml`](../gitops/infrastructure/local-path-provisioner/manifests.yaml))
+  and Home Assistant (needs `hostNetwork: true` for mDNS — see
+  [`gitops/apps/homeassistant/namespace.yaml`](../gitops/apps/homeassistant/namespace.yaml)).
+  Longhorn hit this too before the switch away from it, for the same
+  reason (`privileged` + hostPath to manage block devices/iSCSI directly).
+  Both current namespaces are declared with the label
+  `pod-security.kubernetes.io/enforce: privileged`, which opts them out of
+  the restriction entirely — the namespace must have the label *before*
+  any pod is created into it, and a `kubectl label` after the fact doesn't
+  retroactively unstick already-rejected pods (the controller does retry
+  on its own once the label is fixed, but re-running the relevant install
+  script is the reliable way to confirm it — e.g. a manual
+  `kubectl rollout restart` may be needed to force an immediate retry
+  rather than waiting for the next periodic resync, confirmed necessary in
+  practice for Longhorn's DaemonSet).
+- If you add a new component later that needs any of these (privileged,
+  hostPath, host namespaces), give its namespace the same label — check
+  `kubectl describe pod` events for `violates PodSecurity` first to confirm
+  this is actually why before assuming something else is wrong.
 
 ## Cilium
 
@@ -264,6 +315,25 @@ Helm release**
   (`git log origin/main`, not just committed locally).
 
 ## SealedSecrets
+
+**`scripts/05-install-sealed-secrets.sh` fails with `Error: no repositories
+found matching 'sealed-secrets'. Nothing will be updated`**
+- Fixed: the chart repo moved from `bitnami-labs.github.io/sealed-secrets`
+  to `bitnami.github.io/sealed-secrets` (org rename) — the old URL now
+  404s. `helm repo add` for the old URL was silently failing (masked by a
+  `|| true` that every `helm repo add` in this repo used to have — see the
+  general note below), so the real error only ever surfaced later, confusingly,
+  at the `helm repo update` step. Both `scripts/05-install-sealed-secrets.sh`
+  and `gitops/infrastructure/sealed-secrets/application.yaml` now point at
+  the correct URL.
+- General fix applied to every Helm-based `scripts/0N-install-*.sh` (Cilium,
+  SealedSecrets, cert-manager, ArgoCD): `helm repo add ... ||
+  true` silently swallowed genuine failures (network issues, moved/dead
+  URLs), which only ever surfaced later as a confusing unrelated error one
+  or two commands downstream. Replaced with `helm repo add ...
+  --force-update` — idempotent for re-running with the same name (what
+  `|| true` was actually there for), but a real failure now fails loudly
+  and immediately, at the command that's actually broken.
 
 **`SealedSecret` exists but the resulting `Secret` never appears**
 - `kubectl --kubeconfig kubeconfig -n sealed-secrets logs deploy/sealed-secrets`

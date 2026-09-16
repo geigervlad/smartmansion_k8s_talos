@@ -24,13 +24,15 @@
 #     (scripts/04-install-cilium.sh), deliberately after all 6 nodes are up.
 #
 # Downloads a Talos Image Factory ISO with the iscsi-tools + util-linux-tools
-# extensions baked in (required by Longhorn later) and generates the
-# cluster-wide Talos secrets/base config once up front — both are pure local
-# file operations with no VM dependency, safe to do before any VM exists.
+# extensions baked in (historical: added for Longhorn, unused now that this
+# project runs local-path-provisioner instead — see docu/02-talos-setup.md
+# — but already baked into all 6 nodes and harmless to leave) and generates
+# the cluster-wide Talos secrets/base config once up front — both are pure
+# local file operations with no VM dependency, safe to do before any VM exists.
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 
-log_step "Resolving Talos Image Factory schematic (Longhorn extensions)"
+log_step "Resolving Talos Image Factory schematic"
 SCHEMATIC_ID="$(ensure_talos_schematic_id)"
 log_info "Schematic ID: ${SCHEMATIC_ID}"
 ISO_PATH="$(talos_iso_path "${SCHEMATIC_ID}")"
@@ -189,7 +191,7 @@ bring_up_one_node() {
     if [[ "${NODE_LONGHORN_DISK_GB[$i]}" -gt 0 && ! -f "${lhdisk}" ]]; then
       VBoxManage createmedium disk --filename "${lhdisk}" --size "$(( NODE_LONGHORN_DISK_GB[i] * 1024 ))" --format VDI
       VBoxManage storageattach "${name}" --storagectl SATA --port 2 --device 0 --type hdd --medium "${lhdisk}"
-      log_info "Attached ${NODE_LONGHORN_DISK_GB[$i]}GB Longhorn disk to ${name}."
+      log_info "Attached ${NODE_LONGHORN_DISK_GB[$i]}GB storage disk to ${name}."
     fi
 
     log_info "Starting ${name} headless..."

@@ -1,7 +1,7 @@
 # The single "app of apps" — this is the only Application ever applied by
 # hand (scripts/10-bootstrap-argocd-apps.sh does it once via `kubectl
 # apply`). It recursively watches gitops/ for every other Application
-# manifest (cilium, cert-manager, longhorn, sealed-secrets, dyndns-updater,
+# manifest (cilium, cert-manager, local-path-provisioner, sealed-secrets, dyndns-updater,
 # nextcloud, onlyoffice, homeassistant) and keeps them in sync — that's the
 # entire GitOps bootstrap.
 #

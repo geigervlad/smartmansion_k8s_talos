@@ -2,7 +2,7 @@
 # manifests using the official onlyoffice/documentserver image. It bundles
 # its own PostgreSQL/RabbitMQ/Redis internally (fine at this scale — a
 # single homelab Nextcloud instance) — only its data/log/lib directories are
-# persisted, via one Longhorn PVC with subPath mounts.
+# persisted, via one local-path PVC with subPath mounts.
 #
 # JWT_SECRET must match what Nextcloud's ONLYOFFICE connector app is
 # configured with — both come from the SAME generated value
@@ -17,7 +17,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: longhorn
+  storageClassName: local-path
   resources:
     requests:
       storage: 20Gi

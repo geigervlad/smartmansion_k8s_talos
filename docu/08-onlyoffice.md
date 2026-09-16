@@ -7,8 +7,8 @@ it's the editing backend Nextcloud's ONLYOFFICE connector app calls into.
 
 ## What's configured
 
-- Single Longhorn PVC (20Gi), mounted at three subPaths for the Document
-  Server's data/log/lib directories — it bundles its own
+- Single `local-path` PVC (20Gi), mounted at three subPaths for the
+  Document Server's data/log/lib directories — it bundles its own
   PostgreSQL/RabbitMQ/Redis internally, nothing external needed at this scale.
 - `JWT_ENABLED=true` with `JWT_SECRET` from the `onlyoffice-secrets`
   SealedSecret (`jwt-secret` key) — without this, anyone who can reach

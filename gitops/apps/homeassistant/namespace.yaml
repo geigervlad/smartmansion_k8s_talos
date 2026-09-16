@@ -1,4 +1,14 @@
+# Talos enables the Kubernetes PodSecurity admission controller with
+# "baseline" enforcement by default for every namespace except kube-system.
+# Baseline forbids host namespaces (hostNetwork/hostPID/hostIPC) — Home
+# Assistant needs hostNetwork: true for mDNS (see deployment.yaml) — so
+# without this label its pod would be rejected outright, the same failure
+# mode confirmed for local-path-provisioner's per-PV helper pods (see
+# gitops/infrastructure/local-path-provisioner/manifests.yaml and
+# docu/11-troubleshooting.md).
 apiVersion: v1
 kind: Namespace
 metadata:
   name: homeassistant
+  labels:
+    pod-security.kubernetes.io/enforce: privileged

@@ -7,9 +7,9 @@
 # control-plane node as soon as THAT one is up, not at the very end.
 # scripts/03-bootstrap-cluster.sh then does the remaining cluster-wide tail
 # (finalize talosconfig endpoints, fetch kubeconfig) once all 6 nodes are
-# up. From there: installs Cilium/SealedSecrets/cert-manager/Longhorn/
-# ArgoCD, generates and seals all secrets, and pushes this repo so ArgoCD
-# can take over via GitOps.
+# up. From there: installs Cilium/SealedSecrets/cert-manager/
+# local-path-provisioner/ArgoCD, generates and seals all secrets, and
+# pushes this repo so ArgoCD can take over via GitOps.
 #
 # Safe to re-run: every scripts/NN-*.sh is written to check current state
 # first and skip what's already done (see scripts/lib/common.sh). If a step
@@ -31,7 +31,7 @@ STEPS=(
   04-install-cilium
   05-install-sealed-secrets
   06-install-cert-manager
-  07-install-longhorn
+  07-install-storage
   08-install-argocd
   09-generate-app-secrets
   10-bootstrap-argocd-apps

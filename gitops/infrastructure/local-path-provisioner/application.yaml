@@ -1,6 +1,7 @@
-# Raw manifests (no Helm chart — it's one CronJob), synced directly from
-# this directory. Sync-wave -5, alongside the other infrastructure pieces —
-# no ordering dependency on/from cert-manager, sealed-secrets or local-path-provisioner.
+# No Helm chart (rancher/local-path-provisioner doesn't publish one) — plain
+# directory sync of manifests.yaml. Sync-wave -5, same slot Longhorn used to
+# occupy — no ordering dependency on/from cert-manager, sealed-secrets or
+# Cilium, all must be up before apps (wave 0).
 #
 # repoURL below is already set to this project's GitHub repo. If you fork or
 # rename it, update GITOPS_REPO_URL in config/cluster.env and re-run
@@ -8,7 +9,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: dyndns-updater
+  name: local-path-provisioner
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "-5"
@@ -17,10 +18,12 @@ spec:
   source:
     repoURL: https://github.com/geigervlad/Smartmansion_k8s_talos.git
     targetRevision: main
-    path: gitops/infrastructure/dyndns-updater
+    path: gitops/infrastructure/local-path-provisioner
+    directory:
+      include: "manifests.yaml"
   destination:
     server: https://kubernetes.default.svc
-    namespace: dyndns-updater
+    namespace: local-path-storage
   syncPolicy:
     automated:
       prune: true

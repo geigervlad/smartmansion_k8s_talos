@@ -7,9 +7,12 @@ and [`gitops/apps/nextcloud/application.yaml`](../gitops/apps/nextcloud/applicat
 
 ## What's configured
 
-- **Storage**: 100Gi Longhorn PVC for Nextcloud's data directory, 20Gi for
-  the bundled MariaDB (`mariadb.enabled: true` — the chart's own subchart,
-  not a separately managed database).
+- **Storage**: 100Gi `local-path` PVC for Nextcloud's data directory, 20Gi
+  for the bundled MariaDB (`mariadb.enabled: true` — the chart's own
+  subchart, not a separately managed database). local-path-provisioner
+  pins each PVC's data to whichever node it was first created on — see
+  [`01-architecture.md`](01-architecture.md) for why that trade-off was
+  chosen over Longhorn.
 - **TLS termination happens at the Ingress**, not in the Nextcloud pod —
   `phpClientHttpsFix.enabled: true` tells Nextcloud to trust that and
   generate `https://` links/redirects instead of `http://`. Without this,
@@ -53,5 +56,5 @@ MariaDB), and the `onlyoffice` namespace is allowed in.
   applied, or the Ingress TLS secret not yet issued — check
   `kubectl -n nextcloud get certificate`.
 - **MariaDB pod CrashLoopBackOff on first install**: usually a PVC not yet
-  bound — check `kubectl -n nextcloud get pvc` and Longhorn's own node/disk
-  health (`kubectl -n longhorn-system get nodes.longhorn.io`).
+  bound — check `kubectl -n nextcloud get pvc` and
+  `kubectl -n local-path-storage get pods` (the provisioner itself).

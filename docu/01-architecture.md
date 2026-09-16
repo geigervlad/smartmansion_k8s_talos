@@ -12,12 +12,20 @@ is actually on the LAN, not behind VirtualBox's NAT.
 
 | Node | Role | Default IP |
 |---|---|---|
-| cp1, cp2, cp3 | Talos control-plane (+ Longhorn disk, schedulable) | .50 – .52 |
-| worker1, worker2, worker3 | Talos worker (+ Longhorn disk) | .60 – .62 |
+| cp1, cp2, cp3 | Talos control-plane (+ storage disk, schedulable) | .50 – .52 |
+| worker1, worker2, worker3 | Talos worker (+ storage disk) | .60 – .62 |
 | — | Control-plane VIP (Talos-managed) | .55 |
 
 All defaults live in `config/cluster.env` — change them there, not in
 individual scripts.
+
+The second disk/mount on every node is still internally named/labeled
+"longhorn" (`NODE_LONGHORN_DISK_GB` in `config/cluster.env`, the Talos
+`UserVolumeConfig`, the `node.smartmansion.io/storage=longhorn` node label)
+even though the storage software running on top of it is
+local-path-provisioner, not Longhorn — see
+[`02-talos-setup.md`](02-talos-setup.md) for why that naming was
+deliberately left alone rather than renamed for cosmetics.
 
 ## Why 3+3 and a VIP
 
@@ -27,7 +35,7 @@ Kubernetes API endpoint doesn't hard-depend on any single control-plane node
 being up — `kubectl`/`talosctl`/ArgoCD all talk to the VIP, not to `cp1`
 directly. Unlike the more common pattern, control-plane nodes here are also
 schedulable for workloads (`allowSchedulingOnControlPlanes: true` in
-`talos/patches/controlplane.yaml`) and get a Longhorn disk too — it's one
+`talos/patches/controlplane.yaml`) and get a storage disk too — it's one
 physical machine with 6 VMs total, so leaving 3 of them idle just to follow
 convention wastes half the homelab's capacity. Namespace boundaries and
 NetworkPolicies apply identically regardless of which of the 6 a pod lands on.
@@ -41,7 +49,7 @@ VirtualBox (Debian 12 host)
             ├─ Cilium              CNI + kube-proxy replacement + Ingress Controller + NetworkPolicy
             ├─ SealedSecrets        encrypts secrets so they're safe to commit to git
             ├─ cert-manager         Let's Encrypt certs via DNS-01 (deSEC webhook, see docu/09)
-            ├─ Longhorn             distributed block storage (PVCs for Nextcloud/OnlyOffice/HA)
+            ├─ local-path-provisioner  local storage (PVCs for Nextcloud/OnlyOffice/HA) — see docu/02
             ├─ dyndns-updater       keeps Strato's A records pointed at this homelab's changing public IP
             ├─ ArgoCD               GitOps controller — everything above (except itself) is an Application
             └─ apps: Nextcloud, OnlyOffice, Home Assistant

@@ -33,13 +33,11 @@ This is safe, not just convenient:
   stays a separate, later step, after all 6 nodes are up — see
   [`01-architecture.md`](01-architecture.md) for the full picture.
 
-## 1. The Image Factory schematic (Longhorn extensions)
+## 1. The Image Factory schematic
 
-Stock Talos can't run Longhorn — it needs the `siderolabs/iscsi-tools` and
-`siderolabs/util-linux-tools` system extensions baked into the image.
-`ensure_talos_schematic_id()` in `scripts/lib/common.sh` POSTs the extension
-list to `factory.talos.dev/schematics` once and caches the returned ID in
-`talos/_out/schematic-id.txt`. That same ID is used for both:
+`ensure_talos_schematic_id()` in `scripts/lib/common.sh` POSTs a list of
+system extensions to `factory.talos.dev/schematics` once and caches the
+returned ID in `talos/_out/schematic-id.txt`. That same ID is used for both:
 
 - the boot **ISO** (`https://factory.talos.dev/image/<id>/<version>/metal-amd64.iso`,
   downloaded once up front by `scripts/01-create-vms.sh`, before the
@@ -48,8 +46,17 @@ list to `factory.talos.dev/schematics` once and caches the returned ID in
   (`factory.talos.dev/installer/<id>:<version>`, set by
   `render_node_config_file()` in `scripts/lib/common.sh`) — this second part
   matters: without it, the extensions would only exist on the live boot ISO,
-  not survive the install-to-disk step, and Longhorn would fail on every
-  node after first boot.
+  not survive the install-to-disk step.
+
+**Historical note**: the extensions requested are `siderolabs/iscsi-tools`
+and `siderolabs/util-linux-tools` — stock Talos can't run Longhorn without
+them. This project switched from Longhorn to local-path-provisioner (see
+[`01-architecture.md`](01-architecture.md) and
+[`11-troubleshooting.md`](11-troubleshooting.md) for why), which doesn't
+need iSCSI at all — but the extensions are already baked into all 6
+already-installed nodes and are harmless to leave in place, so they were
+never removed. Not worth reinstalling Talos on 6 nodes to shave two unused
+extensions off the image.
 
 ## 2. Per-node loop (`01-create-vms.sh`)
 
@@ -65,14 +72,15 @@ already exists). Three patch layers get merged into that base config:
 3. A per-node patch generated inline by `render_node_config_file()` in
    `scripts/lib/common.sh` — static IP, hostname (via its own
    `HostnameConfig` document, see below), install image, and a
-   `UserVolumeConfig` document dedicating the second disk to Longhorn.
+   `UserVolumeConfig` document dedicating the second disk to storage (still
+   named "longhorn" — see below and [`01-architecture.md`](01-architecture.md)).
 
 Then, for each node in turn:
 
 1. **Create + start the VM.** Deterministic MAC addresses
    (`node_mac_nocolon()` in `common.sh`, `08:00:27:AA:00:<index>`) mean later
    steps can find a VM on the LAN without persisting any state. All 6 nodes
-   get a second virtual disk for Longhorn (`NODE_LONGHORN_DISK_GB` in
+   get a second virtual disk for storage (`NODE_LONGHORN_DISK_GB` in
    `config/cluster.env`).
 
    Boot order is **disk before dvd** (`--boot1 disk --boot2 dvd`), not the
@@ -152,10 +160,13 @@ setup and are worth knowing about if you hit similar errors:
   need to match on something else, e.g. `disk.transport`/`disk.serial`.)
   Pods can `hostPath` straight into the result, no `extraMounts` needed.
   **The mount path is not configurable**: Talos always uses
-  `/var/mnt/<name>`, which is why `defaultDataPath` in
-  [`gitops/infrastructure/longhorn/values.yaml`](../gitops/infrastructure/longhorn/values.yaml)
-  is `/var/mnt/longhorn`, not `/var/lib/longhorn` — keep the `name` here and
-  that path in sync if you ever change either.
+  `/var/mnt/<name>` — `/var/mnt/longhorn` here, still named after the
+  storage software this project used before switching to
+  local-path-provisioner (see [`01-architecture.md`](01-architecture.md)).
+  local-path-provisioner's `config.json` (in
+  [`gitops/infrastructure/local-path-provisioner/manifests.yaml`](../gitops/infrastructure/local-path-provisioner/manifests.yaml))
+  points its `nodePathMap` at this same `/var/mnt/longhorn` path — keep the
+  `name` here and that path in sync if you ever change either.
 
 If a node's second disk doesn't show up as `/dev/sdb` (the script's
 assumption), check with `talosctl get disks -n <node-ip>` and adjust

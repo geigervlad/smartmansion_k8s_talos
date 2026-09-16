@@ -37,7 +37,7 @@ keeps it using cluster DNS despite `hostNetwork`.
 
 Home Assistant's own setup wizard runs on first access at the URL above —
 create the admin account there (not generated/sealed by this repo, unlike
-Nextcloud). Config persists to a 10Gi Longhorn PVC (`homeassistant-config`).
+Nextcloud). Config persists to a 10Gi `local-path` PVC (`homeassistant-config`).
 
 ## Extending this (out of scope here, but common next steps)
 

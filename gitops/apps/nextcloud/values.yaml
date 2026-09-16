@@ -32,12 +32,12 @@ mariadb:
   primary:
     persistence:
       enabled: true
-      storageClass: longhorn
+      storageClass: local-path
       size: 20Gi
 
 persistence:
   enabled: true
-  storageClass: longhorn
+  storageClass: local-path
   size: 100Gi
   accessMode: ReadWriteOnce
 

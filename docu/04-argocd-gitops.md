@@ -19,7 +19,7 @@ root-app.yaml
   ├─ gitops/infrastructure/sealed-secrets/application.yaml     (wave -5)
   ├─ gitops/infrastructure/cert-manager/application.yaml       (wave -5)
   ├─ gitops/infrastructure/cert-manager/application-config.yaml (wave -4, needs cert-manager CRDs)
-  ├─ gitops/infrastructure/longhorn/application.yaml           (wave -5)
+  ├─ gitops/infrastructure/local-path-provisioner/application.yaml (wave -5)
   ├─ gitops/infrastructure/dyndns-updater/application.yaml     (wave -5)
   ├─ gitops/apps/nextcloud/application.yaml                    (wave 0, default)
   ├─ gitops/apps/onlyoffice/application.yaml                   (wave 0, default)
@@ -34,10 +34,13 @@ the 3 apps.
 ## Why ArgoCD itself is not self-managed
 
 Every other infrastructure component follows "installed once by a
-`scripts/0N-*.sh` via Helm CLI, then adopted into ArgoCD via an
-`application.yaml` using the exact same `values.yaml`" — intentional, so
-there's a single source of truth and no drift between the bootstrap install
-and the ongoing GitOps-managed one.
+`scripts/0N-*.sh`, then adopted into ArgoCD via an `application.yaml`
+pointed at the exact same config" — intentional, so there's a single source
+of truth and no drift between the bootstrap install and the ongoing
+GitOps-managed one. For the Helm-based ones (Cilium, SealedSecrets,
+cert-manager) that's a shared `values.yaml`; for the two with no Helm chart
+(dyndns-updater, local-path-provisioner) it's the same vendored raw
+manifest file both the script and ArgoCD apply.
 
 ArgoCD is the one exception (see
 [`gitops/infrastructure/argocd/values.yaml`](../gitops/infrastructure/argocd/values.yaml)):
@@ -67,12 +70,13 @@ used — they're meant to be identical (same file).
 ## Multi-source Applications (why some `application.yaml` files look unusual)
 
 Charts hosted in an external Helm repo (Cilium, cert-manager, sealed-secrets,
-Longhorn, Nextcloud) can't read a `values.yaml` living in *this* git repo
+Nextcloud) can't read a `values.yaml` living in *this* git repo
 directly — ArgoCD's multi-source `sources:` + `$values` reference pattern is
 used to combine "chart from Helm repo X" with "values file from git repo Y"
 in one Application. Where there's no Helm chart at all (OnlyOffice, Home
-Assistant, and the cert-manager/dyndns-updater raw manifests), a plain
-single-`source` directory sync is used instead, with `directory.exclude`
+Assistant, local-path-provisioner, and the cert-manager/dyndns-updater raw
+manifests), a plain single-`source` directory sync is used instead, with
+`directory.include`/`directory.exclude`
 skipping the Application's own `application.yaml` (already applied by
 root-app, at a different destination).
 

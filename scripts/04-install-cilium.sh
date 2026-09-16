@@ -13,7 +13,7 @@ CILIUM_NAMESPACE="kube-system"
 
 log_step "Installing Cilium CNI"
 
-helm repo add cilium https://helm.cilium.io/ >/dev/null 2>&1 || true
+helm repo add cilium https://helm.cilium.io/ --force-update >/dev/null
 helm repo update cilium >/dev/null
 
 helm upgrade --install cilium cilium/cilium \

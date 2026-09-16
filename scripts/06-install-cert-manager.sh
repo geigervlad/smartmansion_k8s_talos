@@ -16,7 +16,7 @@ CM_NAMESPACE="cert-manager"
 
 log_step "Installing cert-manager"
 
-helm repo add jetstack https://charts.jetstack.io >/dev/null 2>&1 || true
+helm repo add jetstack https://charts.jetstack.io --force-update >/dev/null
 helm repo update jetstack >/dev/null
 
 helm upgrade --install cert-manager jetstack/cert-manager \
@@ -48,4 +48,4 @@ log_warn "  1. scripts/09-generate-app-secrets.sh must seal your deSEC API token
 log_warn "     gitops/infrastructure/cert-manager/manifests/desec-token-sealed-secret.yaml"
 log_warn "  2. The one-time Strato NS delegation for _acme-challenge.<domain> -> deSEC."
 log_warn "See docu/09-cert-manager-dns.md for the exact steps. Neither blocks the rest of this pipeline."
-log_info "Next: ./scripts/07-install-longhorn.sh"
+log_info "Next: ./scripts/07-install-storage.sh"

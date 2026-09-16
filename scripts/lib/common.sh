@@ -173,9 +173,12 @@ node_mac_nocolon() {
 TALOS_SCHEMATIC_FILE="${REPO_ROOT}/${TALOS_OUT_DIR}/schematic-id.txt"
 
 ensure_talos_schematic_id() {
-  # Longhorn needs the iscsi-tools + util-linux-tools system extensions baked
-  # into the Talos image (both the boot ISO and the installed disk image use
-  # the same schematic ID). Cached to disk so we only hit factory.talos.dev once.
+  # iscsi-tools + util-linux-tools system extensions, baked into the Talos
+  # image (both the boot ISO and the installed disk image use the same
+  # schematic ID). Historical: added for Longhorn, which this project no
+  # longer uses (see docu/02-talos-setup.md) — harmless to leave baked into
+  # all 6 already-installed nodes. Cached to disk so we only hit
+  # factory.talos.dev once.
   if [[ -s "${TALOS_SCHEMATIC_FILE}" ]]; then
     cat "${TALOS_SCHEMATIC_FILE}"
     return 0
@@ -227,7 +230,7 @@ ensure_base_talos_config() {
 render_node_config_file() {
   # render_node_config_file <index> -> writes talos/_out/<name>.yaml, the
   # final per-node machine config (static IP, hostname, install image, VIP,
-  # Longhorn volume) ready for `talosctl apply-config`. Requires
+  # storage volume) ready for `talosctl apply-config`. Requires
   # ensure_base_talos_config to have run first.
   local i="$1"
   local role="${NODE_ROLES[$i]}"
@@ -270,10 +273,15 @@ render_node_config_file() {
     echo "    disk: /dev/sda"
     if [[ "${NODE_LONGHORN_DISK_GB[$i]}" -gt 0 ]]; then
       # Second VirtualBox disk (see scripts/01-create-vms.sh), dedicated
-      # whole-disk to Longhorn. name/volumeType are TOP-LEVEL fields on this
+      # whole-disk to storage — name/volumeType are TOP-LEVEL fields on this
       # document, NOT nested under metadata:/provisioning:. Mount path is
-      # NOT configurable: Talos always uses /var/mnt/<name> — kept in sync
-      # with defaultDataPath in gitops/infrastructure/longhorn/values.yaml.
+      # NOT configurable: Talos always uses /var/mnt/<name>. Volume name
+      # deliberately still "longhorn" (this project switched to
+      # local-path-provisioner, which points its nodePathMap at this same
+      # /var/mnt/longhorn path — see
+      # gitops/infrastructure/local-path-provisioner/manifests.yaml — rather
+      # than rename and force Talos to reprovision the disk on all 6
+      # already-running nodes for pure cosmetics, see docu/02-talos-setup.md).
       # Assumes the disk enumerates as /dev/sdb — verify with
       # `talosctl get disks -n <ip>` if this node's layout differs.
       echo "---"

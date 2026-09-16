@@ -39,7 +39,7 @@ scripts/03-bootstrap-cluster.sh    once all 6 nodes are up: finalize talosconfig
 scripts/04-install-cilium.sh       CNI (kube-proxy replacement + ingress controller)
 scripts/05-install-sealed-secrets.sh  controller + back up its private key
 scripts/06-install-cert-manager.sh cert-manager + deSEC DNS-01 webhook + ClusterIssuers
-scripts/07-install-longhorn.sh     distributed storage
+scripts/07-install-storage.sh      local-path-provisioner (local storage)
 scripts/08-install-argocd.sh       ArgoCD itself (not GitOps-managed, see docu/04)
 scripts/09-generate-app-secrets.sh generate/collect + seal every remaining secret
 scripts/10-bootstrap-argocd-apps.sh push this repo, apply the app-of-apps
@@ -56,7 +56,7 @@ scripts/                 the numbered pipeline above, plus scripts/lib/common.sh
 talos/patches/           Talos machine config patches (checked in, no secrets)
 talos/_out/               generated per-node configs + cluster secrets (gitignored)
 gitops/bootstrap/         root-app.yaml — the one Application applied by hand
-gitops/infrastructure/    cilium, cert-manager, longhorn, sealed-secrets, dyndns-updater
+gitops/infrastructure/    cilium, cert-manager, local-path-provisioner, sealed-secrets, dyndns-updater
 gitops/apps/              nextcloud, onlyoffice, homeassistant
 docu/                     you are here
 secrets-vault/            gitignored: raw secrets, key backups — never committed

@@ -11,7 +11,7 @@ SS_RELEASE="sealed-secrets"
 
 log_step "Installing SealedSecrets controller"
 
-helm repo add sealed-secrets https://bitnami-labs.github.io/sealed-secrets >/dev/null 2>&1 || true
+helm repo add sealed-secrets https://bitnami.github.io/sealed-secrets --force-update >/dev/null
 helm repo update sealed-secrets >/dev/null
 
 helm upgrade --install "${SS_RELEASE}" sealed-secrets/sealed-secrets \
