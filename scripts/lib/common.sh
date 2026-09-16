@@ -218,11 +218,19 @@ ensure_base_talos_config() {
     return 0
   fi
   ensure_talos_schematic_id >/dev/null   # cached to disk, just make sure it exists
+  # --config-patch-worker deliberately omitted: talos/patches/worker.yaml is
+  # currently an empty placeholder, and passing an "empty" patch file to
+  # `gen config` — no matter how it's spelled (a truly empty file, or an
+  # explicit `{}`) — has been unreliable across talosctl versions, both
+  # confirmed to fail outright (see docu/11-troubleshooting.md and
+  # https://github.com/siderolabs/talos/issues/13029). Simplest robust fix:
+  # only pass the flag when there's an actual patch to apply. Add it back
+  # (`--config-patch-worker "@${REPO_ROOT}/talos/patches/worker.yaml"`) the
+  # day worker.yaml gets real content.
   talosctl gen config "${CLUSTER_NAME}" "${CLUSTER_ENDPOINT}" \
     --output-dir "${TALOS_OUT_DIR_ABS}" \
     --config-patch "@${REPO_ROOT}/talos/patches/common.yaml" \
-    --config-patch-control-plane "@${REPO_ROOT}/talos/patches/controlplane.yaml" \
-    --config-patch-worker "@${REPO_ROOT}/talos/patches/worker.yaml"
+    --config-patch-control-plane "@${REPO_ROOT}/talos/patches/controlplane.yaml"
   log_info "Wrote controlplane.yaml, worker.yaml, talosconfig to ${TALOS_OUT_DIR_ABS}"
   cp "${TALOS_OUT_DIR_ABS}/talosconfig" "${TALOSCONFIG_PATH}"
 }

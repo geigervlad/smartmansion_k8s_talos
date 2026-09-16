@@ -25,6 +25,17 @@ internalDatabase:
 
 mariadb:
   enabled: true
+  # Broadcom moved almost all bitnami/* images to bitnamilegacy/* on Docker
+  # Hub in August 2025 (commercial "Bitnami Secure Images" push) — the
+  # chart's default image reference (docker.io/bitnami/mariadb) 404s as a
+  # result. bitnamilegacy/* is an unmaintained archive (same tags, frozen,
+  # no further updates) — fine short-term, but if this breaks again later,
+  # that's why: check https://github.com/bitnami/charts/issues/35164 and
+  # consider pinning to a self-hosted mirror or switching to a
+  # non-Bitnami MariaDB image entirely.
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/mariadb
   auth:
     database: nextcloud
     username: nextcloud

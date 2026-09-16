@@ -2,6 +2,29 @@
 
 ## VM / Talos layer
 
+**`ensure_base_talos_config()` (in `scripts/01-create-vms.sh` or
+`scripts/02-generate-talos-config.sh`) fails with `failed to generate
+config bundle: error patching worker config: JSON6902 patches are not
+supported for multi-document machine configuration`, or (after "fixing" it
+with an empty `{}`) `error parsing config JSON patch: config not found`**
+- Confirmed real bug in talosctl itself
+  ([siderolabs/talos#13029](https://github.com/siderolabs/talos/issues/13029)),
+  not something this project's config got wrong: passing an "empty"
+  `--config-patch*` file to `talosctl gen config` — whether the file is
+  truly empty, comments-only (parses to YAML `null`), or an explicit empty
+  mapping (`{}`) — has been unreliable across talosctl versions, each
+  spelling failing a *different* way. There is no config-file spelling of
+  "no patch" that reliably works. The actual fix: don't pass the flag at
+  all when there's nothing to patch. `ensure_base_talos_config()` in
+  `scripts/lib/common.sh` omits `--config-patch-worker` entirely now that
+  `talos/patches/worker.yaml` is an unused placeholder — add the flag back
+  only once that file has real content.
+- Easy to miss because `ensure_base_talos_config()` only actually calls
+  `talosctl gen config` once (skipped on every later run once
+  `talos/_out/controlplane.yaml` exists) — so a bad patch file/flag can sit
+  unnoticed for a long time until the next full rebuild from scratch
+  actually re-runs `gen config` and hits it.
+
 **`scripts/01-create-vms.sh` VMs don't get a LAN IP / `discover_ip_for_mac`
 times out**
 - Check `VBOX_BRIDGE_ADAPTER` in `config/cluster.env` actually matches a real
