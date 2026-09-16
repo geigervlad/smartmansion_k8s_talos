@@ -200,6 +200,29 @@ yet valid"**
   that node's config.
 - `kubectl --kubeconfig kubeconfig -n longhorn-system get nodes.longhorn.io -o yaml`
 
+## Cilium
+
+**`clean-cilium-state` (or `cilium-agent`) init container `CrashLoopBackOff`
+with `unable to apply caps: can't apply capabilities: operation not
+permitted`**
+- Confirmed real gap in the original setup, now fixed: Talos's hardened
+  kernel refuses some of the Linux capabilities Cilium's default Helm chart
+  values request (`SYS_MODULE` in particular — Talos never allows workloads
+  to load kernel modules, full stop). `securityContext.capabilities` in
+  `gitops/infrastructure/cilium/values.yaml` now explicitly lists exactly
+  the capability set Talos actually permits for `ciliumAgent` and
+  `cleanCiliumState`, per Cilium's own Talos installation docs. Fix by
+  re-running `./scripts/04-install-cilium.sh` (it's `helm upgrade
+  --install`, safe to re-run — picks up the corrected values.yaml and
+  replaces the crash-looping pods).
+- While in there: `k8sServiceHost`/`k8sServicePort` also changed from the
+  `CLUSTER_VIP` to Talos's own per-node API server load balancer
+  (`localhost:7445`) — the officially recommended target for in-cluster
+  kube-proxy-replacement clients like Cilium, since it doesn't depend on
+  which node currently holds the VIP or its failover latency. This is a
+  separate mechanism from the VIP, not a duplicate — `kubectl`/`talosctl`/
+  ArgoCD from outside the cluster still go through `CLUSTER_VIP`.
+
 ## cert-manager / DNS
 
 **`ClusterIssuer` is `Ready` but no certificate ever issues**

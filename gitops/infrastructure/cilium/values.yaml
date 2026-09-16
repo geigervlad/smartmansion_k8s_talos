@@ -3,11 +3,16 @@
 # (ongoing GitOps management) — single source of truth, no drift between the two.
 kubeProxyReplacement: true
 
-# Must match CLUSTER_VIP / port 6443 in config/cluster.env. Kept as a literal
-# here (not templated) since ArgoCD renders this file as-is — if you change
-# CLUSTER_VIP, update it in both places.
-k8sServiceHost: "192.168.178.55"
-k8sServicePort: 6443
+# Official Talos + Cilium recommendation: talk to Talos's own per-node API
+# server load balancer on localhost:7445, not the CLUSTER_VIP directly.
+# Talos runs this on every node specifically so in-cluster components (like
+# kube-proxy-replacement clients) don't depend on which node currently
+# holds the VIP or on its failover latency — it's a separate mechanism from
+# the VIP, not a duplicate of it. The VIP (config/cluster.env's
+# CLUSTER_VIP) is still what kubectl/talosctl/ArgoCD use from outside the
+# cluster.
+k8sServiceHost: "localhost"
+k8sServicePort: 7445
 
 ipam:
   mode: kubernetes
@@ -17,6 +22,32 @@ cgroup:
   autoMount:
     enabled: false
   hostRoot: /sys/fs/cgroup
+
+# REQUIRED on Talos — without these explicit overrides, Cilium's default
+# capability set includes things Talos's hardened kernel refuses (SYS_MODULE
+# in particular; Talos disallows workloads loading kernel modules at all).
+# Confirmed real failure mode: the clean-cilium-state init container
+# CrashLoopBackOff'ing with "unable to apply caps: can't apply capabilities:
+# operation not permitted" — this is what fixes it. Per Cilium's own
+# Talos installation docs.
+securityContext:
+  capabilities:
+    ciliumAgent:
+      - CHOWN
+      - KILL
+      - NET_ADMIN
+      - NET_RAW
+      - IPC_LOCK
+      - SYS_ADMIN
+      - SYS_RESOURCE
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    cleanCiliumState:
+      - NET_ADMIN
+      - SYS_ADMIN
+      - SYS_RESOURCE
 
 # Built-in Ingress Controller so we don't need a separate nginx-ingress
 # component. Backs the Ingress resources used by Nextcloud/OnlyOffice/Home
