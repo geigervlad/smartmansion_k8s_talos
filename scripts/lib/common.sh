@@ -12,6 +12,22 @@ NODE_COUNT=${#NODE_NAMES[@]}
 KUBECONFIG_PATH="${REPO_ROOT}/kubeconfig"
 TALOSCONFIG_PATH="${REPO_ROOT}/talosconfig"
 
+# VirtualBox's installer doesn't reliably put VBoxManage on Git Bash's PATH
+# on Windows (even though it's on the Windows PATH) — this pipeline was
+# originally scoped for a dedicated Debian 12 host, but works the same way
+# run directly on a Windows machine with VirtualBox installed locally; this
+# is a no-op there (loop just finds no match, VBoxManage is already on PATH).
+if ! command -v VBoxManage >/dev/null 2>&1; then
+  for vbox_dir in \
+    "/c/Program Files/Oracle/VirtualBox" \
+    "${PROGRAMFILES:-}/Oracle/VirtualBox"; do
+    if [[ -x "${vbox_dir}/VBoxManage.exe" ]]; then
+      export PATH="${PATH}:${vbox_dir}"
+      break
+    fi
+  done
+fi
+
 # ------------------------------------------------------------------ logging --
 COLOR_RESET='\033[0m'
 COLOR_BLUE='\033[1;34m'
@@ -19,8 +35,15 @@ COLOR_GREEN='\033[1;32m'
 COLOR_YELLOW='\033[1;33m'
 COLOR_RED='\033[1;31m'
 
-log_step()  { printf "\n${COLOR_BLUE}==> %s${COLOR_RESET}\n" "$*"; }
-log_info()  { printf "${COLOR_GREEN}[info]${COLOR_RESET} %s\n" "$*"; }
+# All to stderr, deliberately — several functions (discover_ip_for_mac,
+# ensure_talos_schematic_id, etc.) log progress AND return a value via a
+# final `echo` for the caller to capture with $(...). If any log function
+# wrote to stdout, that capture would silently include the log lines too —
+# confirmed in practice: discover_ip_for_mac's "waiting..." message ended up
+# inside $maint_ip once the IP wasn't found on the very first attempt,
+# breaking the apply-config URL it was used to build.
+log_step()  { printf "\n${COLOR_BLUE}==> %s${COLOR_RESET}\n" "$*" >&2; }
+log_info()  { printf "${COLOR_GREEN}[info]${COLOR_RESET} %s\n" "$*" >&2; }
 log_warn()  { printf "${COLOR_YELLOW}[warn]${COLOR_RESET} %s\n" "$*" >&2; }
 log_error() { printf "${COLOR_RED}[error]${COLOR_RESET} %s\n" "$*" >&2; }
 die()       { log_error "$*"; exit 1; }
@@ -87,6 +110,17 @@ vm_running() {
 
 kubectl_ctx() { kubectl --kubeconfig "${KUBECONFIG_PATH}" "$@"; }
 talosctl_ctx() { talosctl --talosconfig "${TALOSCONFIG_PATH}" "$@"; }
+
+talosctl_ctx_t() {
+  # Same as talosctl_ctx but bounded with a timeout. Confirmed real need:
+  # `talosctl ... etcd status` against a node where etcd was never
+  # bootstrapped hangs indefinitely instead of failing fast (the etcd gRPC
+  # endpoint isn't listening at all pre-bootstrap, so the call just blocks).
+  # Use this instead of talosctl_ctx for any check that must fail fast
+  # rather than potentially hang forever — e.g. an idempotency check before
+  # deciding whether to bootstrap.
+  timeout 15 talosctl --talosconfig "${TALOSCONFIG_PATH}" "$@"
+}
 
 helm_release_exists() {
   # helm_release_exists <release> <namespace>
@@ -167,7 +201,124 @@ talos_install_image() {
   echo "factory.talos.dev/installer/${schematic_id}:${TALOS_VERSION}"
 }
 
-# ------------------------------------------------------------- IP discovery --
+TALOS_OUT_DIR_ABS="${REPO_ROOT}/${TALOS_OUT_DIR}"
+
+ensure_base_talos_config() {
+  # Generates the cluster-wide secrets/CA + controlplane.yaml/worker.yaml
+  # ONCE (idempotent — skips if already present, since re-running would
+  # rotate the cluster CA and break an already-bootstrapped cluster). Pure
+  # local file generation, no VM/network dependency — safe to call before
+  # any VM exists.
+  mkdir -p "${TALOS_OUT_DIR_ABS}"
+  if [[ -f "${TALOS_OUT_DIR_ABS}/controlplane.yaml" && -f "${TALOS_OUT_DIR_ABS}/worker.yaml" && -f "${TALOS_OUT_DIR_ABS}/talosconfig" ]]; then
+    log_info "Base Talos configs already exist in ${TALOS_OUT_DIR_ABS} — not regenerating."
+    return 0
+  fi
+  ensure_talos_schematic_id >/dev/null   # cached to disk, just make sure it exists
+  talosctl gen config "${CLUSTER_NAME}" "${CLUSTER_ENDPOINT}" \
+    --output-dir "${TALOS_OUT_DIR_ABS}" \
+    --config-patch "@${REPO_ROOT}/talos/patches/common.yaml" \
+    --config-patch-control-plane "@${REPO_ROOT}/talos/patches/controlplane.yaml" \
+    --config-patch-worker "@${REPO_ROOT}/talos/patches/worker.yaml"
+  log_info "Wrote controlplane.yaml, worker.yaml, talosconfig to ${TALOS_OUT_DIR_ABS}"
+  cp "${TALOS_OUT_DIR_ABS}/talosconfig" "${TALOSCONFIG_PATH}"
+}
+
+render_node_config_file() {
+  # render_node_config_file <index> -> writes talos/_out/<name>.yaml, the
+  # final per-node machine config (static IP, hostname, install image, VIP,
+  # Longhorn volume) ready for `talosctl apply-config`. Requires
+  # ensure_base_talos_config to have run first.
+  local i="$1"
+  local role="${NODE_ROLES[$i]}"
+  local name; name="$(node_name "${i}")"
+  local base="${TALOS_OUT_DIR_ABS}/controlplane.yaml"
+  [[ "${role}" == "worker" ]] && base="${TALOS_OUT_DIR_ABS}/worker.yaml"
+  [[ -f "${base}" ]] || die "${base} missing — ensure_base_talos_config must run first."
+  local schematic_id install_image
+  schematic_id="$(ensure_talos_schematic_id)"
+  install_image="$(talos_install_image "${schematic_id}")"
+  local patch_file="${TALOS_OUT_DIR_ABS}/${name}.patch.yaml"
+  local out_file="${TALOS_OUT_DIR_ABS}/${name}.yaml"
+
+  {
+    echo "machine:"
+    echo "  network:"
+    echo "    interfaces:"
+    # Empirically confirmed via `talosctl get link --insecure` against a
+    # node still in maintenance mode: VirtualBox's emulated NIC (e1000,
+    # "82540EM") comes up as enp0s3 under Talos on every node in this
+    # cluster, NOT eth0. Getting this wrong means the static IP/route below
+    # silently never applies (the node just keeps whatever DHCP gave it,
+    # with no obvious error) — if you ever change the VM's NIC type/count,
+    # re-verify with the same command before assuming this still matches.
+    echo "      - interface: enp0s3"
+    echo "        dhcp: false"
+    echo "        addresses:"
+    echo "          - ${NODE_IPS[$i]}/24"
+    echo "        routes:"
+    echo "          - network: 0.0.0.0/0"
+    echo "            gateway: ${NETWORK_GATEWAY}"
+    if [[ "${role}" == "controlplane" ]]; then
+      echo "        vip:"
+      echo "          ip: ${CLUSTER_VIP}"
+    fi
+    echo "    nameservers:"
+    echo "      - ${NETWORK_DNS_SERVERS}"
+    echo "  install:"
+    echo "    image: ${install_image}"
+    echo "    disk: /dev/sda"
+    if [[ "${NODE_LONGHORN_DISK_GB[$i]}" -gt 0 ]]; then
+      # Second VirtualBox disk (see scripts/01-create-vms.sh), dedicated
+      # whole-disk to Longhorn. name/volumeType are TOP-LEVEL fields on this
+      # document, NOT nested under metadata:/provisioning:. Mount path is
+      # NOT configurable: Talos always uses /var/mnt/<name> — kept in sync
+      # with defaultDataPath in gitops/infrastructure/longhorn/values.yaml.
+      # Assumes the disk enumerates as /dev/sdb — verify with
+      # `talosctl get disks -n <ip>` if this node's layout differs.
+      echo "---"
+      echo "apiVersion: v1alpha1"
+      echo "kind: UserVolumeConfig"
+      echo "name: longhorn"
+      echo "volumeType: disk"
+      echo "provisioning:"
+      echo "  diskSelector:"
+      echo "    match: disk.dev_path == '/dev/sdb'"
+    fi
+    # Talos v1.10+ config is multi-document: hostname moved out of the
+    # classic machine.network.hostname field into its own HostnameConfig
+    # document. Setting both errors with "static hostname is already set".
+    echo "---"
+    echo "apiVersion: v1alpha1"
+    echo "kind: HostnameConfig"
+    # Base config defaults to auto: stable — must be explicitly switched to
+    # "off" (the only other valid AutoHostnameKind value), Talos rejects
+    # 'auto' and 'hostname' both being set otherwise.
+    echo "auto: \"off\""
+    echo "hostname: ${name}"
+  } > "${patch_file}"
+
+  talosctl machineconfig patch "${base}" --patch "@${patch_file}" -o "${out_file}"
+  log_info "Rendered ${out_file} (${NODE_IPS[$i]}, role=${role})"
+}
+
+eject_iso_if_present() {
+  # Talos installs itself to disk and reboots automatically once config is
+  # applied — VBoxManage's own boot order (disk before dvd, see
+  # scripts/01-create-vms.sh) is what makes that reboot actually land on the
+  # installed system rather than the ISO again. This ejects the ISO on top
+  # of that as a second safety net, once a node proves it's running from its
+  # real install (reachable at its static IP).
+  local i="$1"
+  local vm_name; vm_name="$(node_full_name "${i}")"
+  local current
+  current="$(VBoxManage showvminfo "${vm_name}" --machinereadable 2>/dev/null | sed -n 's/^"SATA-1-0"="\(.*\)"$/\1/p')"
+  if [[ -n "${current}" && "${current}" != "none" && "${current}" != "emptydrive" ]]; then
+    log_info "Ejecting install ISO from ${vm_name} (install completed — this is belt-and-suspenders on top of the disk-first boot order)."
+    VBoxManage storageattach "${vm_name}" --storagectl SATA --port 1 --device 0 --type dvddrive --medium emptydrive
+  fi
+}
+
 # ------------------------------------------------------------- sealed secrets --
 PUB_CERT_PATH="${REPO_ROOT}/gitops/infrastructure/sealed-secrets/pub-cert.pem"
 
@@ -187,14 +338,23 @@ seal_secret_literals() {
   | kubeseal --cert "${PUB_CERT_PATH}" --format yaml > "${out}"
 }
 
+# ------------------------------------------------------------- IP discovery --
 discover_ip_for_mac() {
   # Polls the host ARP table for a given MAC (colon form) until it shows up,
   # used to find a freshly-booted VM's DHCP "maintenance mode" IP before it
   # has any Talos config applied. Requires nmap to actively populate ARP.
-  local mac="$1" timeout="${2:-300}" waited=0 ip=""
+  #
+  # `ip neigh` (iproute2) is Linux-only — on Windows/Git Bash it doesn't
+  # exist, so fall back to the native `arp -a` (present on both, but with a
+  # hyphen-separated MAC format there instead of colons).
+  local mac="$1" timeout="${2:-300}" waited=0 ip="" mac_lower="${mac,,}"
   while (( waited < timeout )); do
     nmap -sn "${NETWORK_SUBNET_CIDR}" >/dev/null 2>&1 || true
-    ip="$(ip neigh show | awk -v m="${mac,,}" 'tolower($0) ~ m {print $1; exit}')"
+    if command -v ip >/dev/null 2>&1; then
+      ip="$(ip neigh show | awk -v m="${mac_lower}" 'tolower($0) ~ m {print $1; exit}')"
+    else
+      ip="$(arp -a | awk -v m="${mac_lower//:/-}" 'tolower($0) ~ m {print $1; exit}')"
+    fi
     if [[ -n "${ip}" ]]; then
       echo "${ip}"
       return 0

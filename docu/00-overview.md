@@ -33,9 +33,9 @@ Assistant.
 
 ```
 scripts/00-check-prereqs.sh        sanity-check tools + config/cluster.env
-scripts/01-create-vms.sh           create 6 VirtualBox VMs, boot Talos ISO
-scripts/02-generate-talos-config.sh generate + patch per-node Talos configs
-scripts/03-bootstrap-cluster.sh    apply configs, bootstrap etcd, fetch kubeconfig
+scripts/01-create-vms.sh           per node: create VM, start it, apply Talos config, verify — one at a time (bootstraps etcd right after node 1)
+scripts/02-generate-talos-config.sh optional: re-render per-node configs without touching any VM
+scripts/03-bootstrap-cluster.sh    once all 6 nodes are up: finalize talosconfig endpoints, fetch kubeconfig
 scripts/04-install-cilium.sh       CNI (kube-proxy replacement + ingress controller)
 scripts/05-install-sealed-secrets.sh  controller + back up its private key
 scripts/06-install-cert-manager.sh cert-manager + deSEC DNS-01 webhook + ClusterIssuers

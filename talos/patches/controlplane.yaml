@@ -1,0 +1,7 @@
+# Applied only to controlplane.yaml via `talosctl gen config --config-patch-control-plane`.
+# All 6 nodes run on one physical machine — no reason to leave the 3
+# control-plane nodes idle, so they're schedulable for workloads too (removes
+# Talos's default NoSchedule taint on control-plane nodes). NetworkPolicies
+# and namespace boundaries still apply the same as on workers.
+cluster:
+  allowSchedulingOnControlPlanes: true

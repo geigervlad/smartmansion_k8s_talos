@@ -1,0 +1,4 @@
+# Applied only to worker.yaml via `talosctl gen config --config-patch-worker`.
+# Currently empty — the Longhorn storage node-label moved to common.yaml
+# since all 6 nodes (not just workers) now have a Longhorn disk. Kept as a
+# placeholder for future worker-only settings.

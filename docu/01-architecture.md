@@ -12,7 +12,7 @@ is actually on the LAN, not behind VirtualBox's NAT.
 
 | Node | Role | Default IP |
 |---|---|---|
-| cp1, cp2, cp3 | Talos control-plane | .50 – .52 |
+| cp1, cp2, cp3 | Talos control-plane (+ Longhorn disk, schedulable) | .50 – .52 |
 | worker1, worker2, worker3 | Talos worker (+ Longhorn disk) | .60 – .62 |
 | — | Control-plane VIP (Talos-managed) | .55 |
 
@@ -25,9 +25,12 @@ individual scripts.
 shared `CLUSTER_VIP` (Talos's built-in Virtual IP feature) means the
 Kubernetes API endpoint doesn't hard-depend on any single control-plane node
 being up — `kubectl`/`talosctl`/ArgoCD all talk to the VIP, not to `cp1`
-directly. Workloads never schedule on control-plane nodes (the default Talos
-taint, made explicit in `talos/patches/controlplane.yaml`) — only the 3
-workers run Nextcloud/OnlyOffice/Home Assistant/Longhorn.
+directly. Unlike the more common pattern, control-plane nodes here are also
+schedulable for workloads (`allowSchedulingOnControlPlanes: true` in
+`talos/patches/controlplane.yaml`) and get a Longhorn disk too — it's one
+physical machine with 6 VMs total, so leaving 3 of them idle just to follow
+convention wastes half the homelab's capacity. Namespace boundaries and
+NetworkPolicies apply identically regardless of which of the 6 a pod lands on.
 
 ## Software layers
 

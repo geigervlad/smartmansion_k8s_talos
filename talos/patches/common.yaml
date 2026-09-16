@@ -1,0 +1,24 @@
+# Applied to every node (control-plane and worker) via
+# `talosctl gen config --config-patch`.
+#
+# - cni.name: none        -> we install Cilium ourselves (scripts/04-install-cilium.sh),
+#                             so Talos must not bring up its default Flannel CNI.
+# - proxy.disabled: true   -> Cilium runs in kube-proxy-replacement mode.
+cluster:
+  network:
+    cni:
+      name: none
+  proxy:
+    disabled: true
+machine:
+  time:
+    servers:
+      - pool.ntp.org
+  sysctls:
+    net.core.somaxconn: "65535"
+  kubelet:
+    extraArgs:
+      # All 6 nodes have a Longhorn disk (see NODE_LONGHORN_DISK_GB in
+      # config/cluster.env) — this label is how Longhorn's own nodeSelector
+      # (gitops/infrastructure/longhorn/values.yaml) targets them.
+      node-labels: "node.smartmansion.io/storage=longhorn"

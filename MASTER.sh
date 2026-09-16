@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
-# The single entry point: runs every step in scripts/ in order, end to end —
-# creates the 6 VirtualBox VMs, bootstraps Talos + Kubernetes, installs
-# Cilium/SealedSecrets/cert-manager/Longhorn/ArgoCD, generates and seals all
-# secrets, and pushes this repo so ArgoCD can take over via GitOps.
+# The single entry point: runs every step in scripts/ in order, end to end.
+# scripts/01-create-vms.sh brings up each of the 6 nodes fully (create VM,
+# start it, apply Talos config, verify it's up) one at a time before moving
+# to the next, so a problem with one node surfaces immediately instead of
+# after all 6 were created — it also bootstraps etcd on the first
+# control-plane node as soon as THAT one is up, not at the very end.
+# scripts/03-bootstrap-cluster.sh then does the remaining cluster-wide tail
+# (finalize talosconfig endpoints, fetch kubeconfig) once all 6 nodes are
+# up. From there: installs Cilium/SealedSecrets/cert-manager/Longhorn/
+# ArgoCD, generates and seals all secrets, and pushes this repo so ArgoCD
+# can take over via GitOps.
 #
 # Safe to re-run: every scripts/NN-*.sh is written to check current state
 # first and skip what's already done (see scripts/lib/common.sh). If a step
