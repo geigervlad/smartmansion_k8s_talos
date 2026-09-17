@@ -75,6 +75,9 @@ secrets-vault/            gitignored: raw secrets, key backups — never committ
 - OnlyOffice: `https://onlyoffice.lan` (not meant to be used directly
   by you — it's the editing backend Nextcloud calls into, see
   [`08-onlyoffice.md`](08-onlyoffice.md))
+- Hubble UI: `https://hubble.lan` — Cilium's network observability
+  dashboard (flow logs, service graph, live NetworkPolicy visualization),
+  see [`gitops/infrastructure/cilium/manifests/hubble-ui-ingress.yaml`](../gitops/infrastructure/cilium/manifests/hubble-ui-ingress.yaml)
 
 Every one of these needs `scripts/11-configure-hosts.sh` to have run first
 (the domain doesn't resolve otherwise) and will show a certificate warning

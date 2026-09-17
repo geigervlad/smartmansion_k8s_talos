@@ -1,0 +1,36 @@
+# Exposes Hubble UI (Cilium's network observability dashboard — flow logs,
+# service dependency graph, live NetworkPolicy visualization) at
+# hubble.lan. hubble.ui.enabled/hubble.relay.enabled in
+# gitops/infrastructure/cilium/values.yaml already create the hubble-ui
+# Deployment/Service (kube-system, port 80) — this just adds the Ingress
+# route on top, same pattern as every app under gitops/apps/*.
+#
+# No authentication in front of this — same LAN-only trust model as
+# everything else here, but worth knowing: Hubble UI can show flow-level
+# traffic across every namespace, not just one app's. Not exposed outside
+# this network any more than anything else in this project is (see
+# docu/09-cert-manager-dns.md).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hubble-ui
+  namespace: kube-system
+  annotations:
+    cert-manager.io/cluster-issuer: smartmansion-internal   # self-signed internal CA, see docu/09-cert-manager-dns.md
+spec:
+  ingressClassName: cilium
+  tls:
+    - hosts:
+        - hubble.lan
+      secretName: hubble-ui-tls
+  rules:
+    - host: hubble.lan
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: hubble-ui
+                port:
+                  number: 80
