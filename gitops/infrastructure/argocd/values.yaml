@@ -1,9 +1,7 @@
-# Helm values for the argo/argo-cd chart. Used only by
-# scripts/08-install-argocd.sh — unlike the other infrastructure components,
-# ArgoCD is deliberately NOT re-adopted as an ArgoCD Application afterwards
-# (no self-management). Letting ArgoCD manage its own install risks a bad
-# sync locking you out of the one tool you'd need to fix it — see
-# docu/04-argocd-gitops.md.
+# Helm values for the argo/argo-cd chart. Used by both
+# scripts/08-install-argocd.sh (the bootstrap install) and
+# gitops/infrastructure/argocd/application.yaml (ongoing GitOps management,
+# manual-sync-only — see that file for why) — same file, no drift.
 configs:
   params:
     server.insecure: true   # TLS is terminated at the Cilium Ingress below

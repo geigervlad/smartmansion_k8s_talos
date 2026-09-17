@@ -42,7 +42,7 @@ scripts/04-install-cilium.sh       CNI (kube-proxy replacement + ingress control
 scripts/05-install-sealed-secrets.sh  controller + back up its private key
 scripts/06-install-cert-manager.sh cert-manager + the internal CA ClusterIssuer
 scripts/07-install-storage.sh      local-path-provisioner (local storage)
-scripts/08-install-argocd.sh       ArgoCD itself (not GitOps-managed, see docu/04)
+scripts/08-install-argocd.sh       ArgoCD itself (later self-adopted, manual-sync-only — see docu/04)
 scripts/09-generate-app-secrets.sh generate + seal every app secret
 scripts/10-bootstrap-argocd-apps.sh push this repo, apply the app-of-apps
 scripts/11-configure-hosts.sh      point every *.lan domain at the cluster in your Windows hosts file

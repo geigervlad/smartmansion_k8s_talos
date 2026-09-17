@@ -2,8 +2,9 @@
 # Installs ArgoCD via Helm. Does NOT apply the root app-of-apps yet — that
 # needs the GitOps repo to actually contain the manifests we're generating in
 # this same pipeline, which only happens once scripts/10-bootstrap-argocd-apps.sh
-# commits and pushes. ArgoCD itself is intentionally never re-adopted as a
-# GitOps-managed Application (see gitops/infrastructure/argocd/values.yaml).
+# commits and pushes. Once it does, ArgoCD adopts its own release via
+# gitops/infrastructure/argocd/application.yaml — manual-sync-only, see that
+# file for why.
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 

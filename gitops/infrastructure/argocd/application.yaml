@@ -1,0 +1,44 @@
+# Adopts the ArgoCD Helm release installed by scripts/08-install-argocd.sh
+# into ArgoCD itself, same pattern as every other bootstrap-installed
+# component (Cilium, cert-manager, SealedSecrets) — one values.yaml, no
+# drift between the script-driven install and the GitOps-managed one.
+#
+# Deliberately NOT `syncPolicy.automated`: every other Application in this
+# repo auto-syncs + self-heals, but letting ArgoCD auto-apply changes to
+# *itself* means a bad values.yaml (wrong ingress config, resources sized
+# too small, a broken chart bump) could roll out and lock you out of the one
+# tool you'd need to fix it, with no human in the loop to catch it first.
+# This Application still shows up as OutOfSync the moment `values.yaml`
+# drifts from what's actually running — you just have to explicitly confirm
+# the sync (`argocd app sync argocd`, or Sync in the UI) rather than it
+# happening automatically. Sync-wave -5, alongside the other
+# script-installed infra.
+#
+# repoURL below is already set to this project's GitHub repo. If you fork or
+# rename it, update GITOPS_REPO_URL in config/cluster.env and re-run
+# scripts/10-bootstrap-argocd-apps.sh, which re-templates every occurrence.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  project: default
+  sources:
+    - repoURL: https://argoproj.github.io/argo-helm
+      chart: argo-cd
+      targetRevision: 10.9.1
+      helm:
+        valueFiles:
+          - $values/gitops/infrastructure/argocd/values.yaml
+    - repoURL: https://github.com/geigervlad/Smartmansion_k8s_talos.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true

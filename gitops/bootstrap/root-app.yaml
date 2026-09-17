@@ -4,8 +4,10 @@
 # manifest (cilium (+ its LB-IPAM/L2 config), cert-manager (+ its config),
 # local-path-provisioner, sealed-secrets (the controller) +
 # sealed-secrets-data (every generated SealedSecret, see
-# gitops/sealed-secrets/), nextcloud, onlyoffice, homeassistant) and keeps
-# them in sync — that's the entire GitOps bootstrap.
+# gitops/sealed-secrets/), argocd (itself — manual-sync-only, see
+# gitops/infrastructure/argocd/application.yaml and docu/04-argocd-gitops.md),
+# nextcloud, onlyoffice, homeassistant) and keeps them in sync — that's the
+# entire GitOps bootstrap.
 #
 # `include: "**/application*.yaml"` deliberately matches every file named
 # application.yaml / application-config.yaml / application-<name>.yaml, so
