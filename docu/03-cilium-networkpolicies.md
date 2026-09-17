@@ -26,7 +26,7 @@ for the `fromEntities: [ingress]` feature below) that:
   explicitly allowed (`endpointSelector: {}` with only listed `ingress`
   rules matching).
 - **Allows traffic from Cilium's own Ingress Controller** via
-  `fromEntities: [ingress]` — this is how `https://nextcloud.localhost` actually
+  `fromEntities: [ingress]` — this is how `https://nextcloud.lan` actually
   reaches the Nextcloud pod at all.
 - **Allows same-namespace traffic** via `fromEndpoints: [{}]` — e.g. Nextcloud
   talking to its own PostgreSQL/Redis pods.

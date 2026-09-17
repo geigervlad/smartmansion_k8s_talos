@@ -297,7 +297,7 @@ permitted`**
   separate mechanism from the VIP, not a duplicate — `kubectl`/`talosctl`/
   ArgoCD from outside the cluster still go through `CLUSTER_VIP`.
 
-## cert-manager / `.localhost`
+## cert-manager / `.lan`
 
 **`ClusterIssuer smartmansion-internal` is not `Ready`**
 - Check the CA `Certificate` itself first:
@@ -308,14 +308,17 @@ permitted`**
   this should self-resolve within seconds unless cert-manager itself isn't
   healthy — check `kubectl -n cert-manager get pods`.
 
-**A `*.localhost` domain doesn't resolve, or a browser shows "can't reach
-this site" rather than a certificate warning**
+**A `*.lan` domain doesn't resolve, or a browser shows "can't reach this
+site" rather than a certificate warning**
 - This is a DNS/routing problem, not a cert-manager one. See the
   troubleshooting section of [`09-cert-manager-dns.md`](09-cert-manager-dns.md)
   — check the Windows hosts file has the entry
   (`scripts/11-configure-hosts.sh` must be run from an Administrator shell),
   then check `kubectl -n kube-system get svc cilium-ingress` actually has
-  `EXTERNAL-IP` set to `INGRESS_VIP`.
+  `EXTERNAL-IP` set to `INGRESS_VIP`. Verify with `curl -kv https://<domain>/`
+  (not `curl --resolve`, which bypasses name resolution and will hide a
+  broken hosts-file lookup) — confirm it actually tries connecting to
+  `INGRESS_VIP`, not `127.0.0.1`/`::1`.
 
 **Browser still shows a certificate warning after importing
 `secrets-vault/smartmansion-ca.crt`**
@@ -423,7 +426,7 @@ image this project actually wants to run**
   see the section below, but the wave ordering was kept since there's no
   reason to move it back).
 
-## Moved to LAN-only access: internal CA, `.localhost`, no more public DNS (2026-09)
+## Moved to LAN-only access: internal CA, `.lan`, no more public DNS (2026-09)
 
 This project originally used `smartmansion.de` + Let's Encrypt (via a
 deSEC.io DNS-01 delegation, since Strato has no ACME API) + a DynDNS updater
@@ -446,12 +449,12 @@ so it was removed outright:
 - **Kept and promoted**: the `smartmansion-internal` self-signed
   ClusterIssuer already existed as a documented fallback — it's now the
   *only* ClusterIssuer. See [`09-cert-manager-dns.md`](09-cert-manager-dns.md).
-- **New**: every domain is `*.localhost` (`DOMAIN_NEXTCLOUD` etc. in
+- **New**: every domain is `*.lan` (`DOMAIN_NEXTCLOUD` etc. in
   `config/cluster.env`), resolved via a plain Windows hosts-file entry
   (`scripts/11-configure-hosts.sh`, needs an Administrator shell) rather
   than any DNS server at all.
-- **New, to make `*.localhost` actually reachable on real ports (80/443, not
-  a NodePort)**: Cilium's L2 announcement + LB-IPAM features are now enabled
+- **New, to make `*.lan` actually reachable on real ports (80/443, not a
+  NodePort)**: Cilium's L2 announcement + LB-IPAM features are now enabled
   (`gitops/infrastructure/cilium/values.yaml`), with a
   `CiliumLoadBalancerIPPool` (one IP, `INGRESS_VIP`) and a
   `CiliumL2AnnouncementPolicy` (`gitops/infrastructure/cilium/manifests/`)
@@ -459,13 +462,17 @@ so it was removed outright:
   Without this, a bare-metal `LoadBalancer`-type Service just sits at
   `EXTERNAL-IP=<pending>` forever — there's no cloud provider here to
   allocate one.
-- **Caveat inherited from this whole approach, not a bug**: `.localhost` is
-  an RFC 6761 reserved TLD that some resolvers hardcode to `127.0.0.1`
-  regardless of the hosts file. Windows itself checks the hosts file first
-  (confirmed working), but a specific browser/resolver might not — see
-  [`09-cert-manager-dns.md`](09-cert-manager-dns.md) for the fix
-  (`DOMAIN_*` is just config, swap the suffix and re-run
-  `scripts/11-configure-hosts.sh`).
+- **`.localhost` (the first attempt) was tried and confirmed broken, not
+  just theoretically risky**: it's an RFC 6761 reserved TLD, and on this
+  exact setup both curl and Windows' own resolver hardcoded it to
+  `127.0.0.1`/`::1` *before the hosts file was ever consulted* — a correct
+  hosts-file entry pointing `homeassistant.localhost` at `INGRESS_VIP` was
+  silently ignored, every connection refused. Switched to `.lan`, which
+  carries no such reservation — see
+  [`09-cert-manager-dns.md`](09-cert-manager-dns.md) for how to verify a
+  domain actually resolves where you think it does (`curl -kv`, never
+  `curl --resolve` — that flag masks exactly this failure) and how to swap
+  to yet another suffix if `.lan` ever causes trouble on a specific network.
 
 ## SealedSecrets
 

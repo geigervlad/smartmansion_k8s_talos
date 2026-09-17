@@ -4,7 +4,7 @@ A GitOps-managed Kubernetes homelab: 6 Talos Linux VMs (3 control-plane + 3
 worker) on a single VirtualBox host, deployed and managed entirely through
 this repository via ArgoCD. Runs Nextcloud, OnlyOffice and Home Assistant,
 with Cilium NetworkPolicies, SealedSecrets, and cert-manager backed by a
-self-signed internal CA — LAN-only access via `*.localhost` domains, no
+self-signed internal CA — LAN-only access via `*.lan` domains, no
 public DNS or Let's Encrypt involved at all.
 
 **Start here: [`docu/00-overview.md`](docu/00-overview.md).**

@@ -9,7 +9,7 @@
 # (finalize talosconfig endpoints, fetch kubeconfig) once all 6 nodes are
 # up. From there: installs Cilium/SealedSecrets/cert-manager/
 # local-path-provisioner/ArgoCD, generates and seals all secrets, pushes
-# this repo so ArgoCD can take over via GitOps, then points the *.localhost
+# this repo so ArgoCD can take over via GitOps, then points the *.lan
 # domains at the cluster in your Windows hosts file.
 #
 # Safe to re-run: every scripts/NN-*.sh is written to check current state

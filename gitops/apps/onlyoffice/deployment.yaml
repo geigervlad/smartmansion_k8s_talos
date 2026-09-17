@@ -117,10 +117,10 @@ spec:
   ingressClassName: cilium
   tls:
     - hosts:
-        - onlyoffice.localhost
+        - onlyoffice.lan
       secretName: onlyoffice-tls
   rules:
-    - host: onlyoffice.localhost
+    - host: onlyoffice.lan
       http:
         paths:
           - path: /

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Adds one hosts-file entry per DOMAIN_* in config/cluster.env, all pointing
-# at INGRESS_VIP — this is the ONLY thing that makes
-# https://nextcloud.localhost/etc. resolve at all, since this project uses
-# no real DNS (see docu/09-cert-manager-dns.md).
+# at INGRESS_VIP — this is the ONLY thing that makes https://nextcloud.lan/
+# etc. resolve at all, since this project uses no real DNS (see
+# docu/09-cert-manager-dns.md).
 #
 # Idempotent and safe to re-run: everything this script writes lives inside
 # one clearly marked block, replaced wholesale on every run (so an IP change
@@ -55,6 +55,6 @@ log_info "  ${INGRESS_VIP} ${DOMAIN_ONLYOFFICE}"
 log_info "  ${INGRESS_VIP} ${DOMAIN_ARGOCD}"
 
 log_warn "If a domain doesn't resolve right away, Windows may have cached the old (missing) answer — run: ipconfig /flushdns"
-log_warn "NOTE on .localhost specifically: some browsers/resolvers hardcode the whole *.localhost TLD to 127.0.0.1 and ignore the hosts file for it entirely (RFC 6761) — Windows itself respects the hosts file first, but if a specific browser doesn't reach ${INGRESS_VIP} for these domains, that's why. See docu/09-cert-manager-dns.md for the fix (switch to a non-reserved suffix)."
+log_warn "Verify with 'curl -kv https://<domain>/' (NOT curl --resolve, which bypasses name resolution and would hide a broken hosts-file lookup) — confirm it actually tries connecting to ${INGRESS_VIP}, not 127.0.0.1/::1. This project uses .lan specifically because .localhost (a reserved TLD, RFC 6761) was confirmed to get hijacked before the hosts file on this setup — see docu/09-cert-manager-dns.md if you ever change DOMAIN_* to another suffix and hit the same thing."
 log_info "Pipeline complete. Browse to https://${DOMAIN_NEXTCLOUD}, https://${DOMAIN_HOMEASSISTANT}, https://${DOMAIN_ONLYOFFICE}, https://${DOMAIN_ARGOCD}"
 log_info "First visit to each will show a certificate warning until you import secrets-vault/smartmansion-ca.crt — see docu/09-cert-manager-dns.md."

@@ -14,7 +14,7 @@ server:
     ingressClassName: cilium
     annotations:
       cert-manager.io/cluster-issuer: smartmansion-internal   # self-signed internal CA, see docu/09-cert-manager-dns.md
-    hostname: argocd.localhost
+    hostname: argocd.lan
     tls: true
 
 resources:

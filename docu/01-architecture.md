@@ -84,4 +84,4 @@ upgrades are atomic image swaps, not `apt upgrade`.
   account, nothing reachable from the internet at all. The tradeoff:
   every device needs the CA certificate imported once to avoid browser
   warnings — see [`09-cert-manager-dns.md`](09-cert-manager-dns.md) for the
-  full reasoning and why `.localhost` was chosen as the domain suffix.
+  full reasoning and why `.lan` was chosen as the domain suffix.

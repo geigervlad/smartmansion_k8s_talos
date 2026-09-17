@@ -3,7 +3,7 @@
 A GitOps-managed Kubernetes homelab: one Debian 12 host runs 6 Talos Linux
 VMs (3 control-plane + 3 worker) under VirtualBox, managed entirely through
 this git repository via ArgoCD. Deploys Nextcloud, OnlyOffice and Home
-Assistant. LAN-only access via `*.localhost` domains and a self-signed
+Assistant. LAN-only access via `*.lan` domains and a self-signed
 internal CA — no public DNS, no Let's Encrypt (see
 [`09-cert-manager-dns.md`](09-cert-manager-dns.md)).
 
@@ -14,7 +14,7 @@ internal CA — no public DNS, no Let's Encrypt (see
 - [`10-master-script.md`](10-master-script.md) — how to actually run this
   end to end.
 - [`09-cert-manager-dns.md`](09-cert-manager-dns.md) — the internal CA +
-  `.localhost` setup, and the one caveat worth knowing about it before you
+  `.lan` setup, and the one caveat worth knowing about it before you
   rely on it.
 
 ## Prerequisites (on the Debian 12 host)
@@ -45,7 +45,7 @@ scripts/07-install-storage.sh      local-path-provisioner (local storage)
 scripts/08-install-argocd.sh       ArgoCD itself (not GitOps-managed, see docu/04)
 scripts/09-generate-app-secrets.sh generate + seal every app secret
 scripts/10-bootstrap-argocd-apps.sh push this repo, apply the app-of-apps
-scripts/11-configure-hosts.sh      point every *.localhost domain at the cluster in your Windows hosts file
+scripts/11-configure-hosts.sh      point every *.lan domain at the cluster in your Windows hosts file
 ```
 
 Run them all via `./MASTER.sh`, or one at a time while debugging — see
@@ -68,11 +68,11 @@ secrets-vault/            gitignored: raw secrets, key backups — never committ
 
 ## After the first successful run
 
-- ArgoCD UI: `https://argocd.localhost` (or port-forward — see
+- ArgoCD UI: `https://argocd.lan` (or port-forward — see
   `scripts/08-install-argocd.sh` output).
-- Nextcloud: `https://nextcloud.localhost`
-- Home Assistant: `https://homeassistant.localhost`
-- OnlyOffice: `https://onlyoffice.localhost` (not meant to be used directly
+- Nextcloud: `https://nextcloud.lan`
+- Home Assistant: `https://homeassistant.lan`
+- OnlyOffice: `https://onlyoffice.lan` (not meant to be used directly
   by you — it's the editing backend Nextcloud calls into, see
   [`08-onlyoffice.md`](08-onlyoffice.md))
 

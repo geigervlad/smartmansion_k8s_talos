@@ -30,20 +30,30 @@ persistence:
   size: 10Gi
   accessMode: ReadWriteOnce
 
+# Required for the Ingress above to actually work: without this, HA rejects
+# requests proxied through Cilium's Envoy-based ingress with a bare "400:
+# Bad Request" (HA 2026.8+ manages this via /config/.storage/http, seeded
+# from trusted_proxies below — see the chart's httpStorageTemplate value —
+# but ONLY on a genuinely fresh install, so this only self-heals a
+# not-yet-onboarded instance; an already-running one needs the file patched
+# by hand once, see docu/07-homeassistant.md).
+configuration:
+  enabled: true
+
 ingress:
   enabled: true
   className: cilium
   annotations:
     cert-manager.io/cluster-issuer: smartmansion-internal   # self-signed internal CA, see docu/09-cert-manager-dns.md
   hosts:
-    - host: homeassistant.localhost
+    - host: homeassistant.lan
       paths:
         - path: /
           pathType: Prefix
   tls:
     - secretName: homeassistant-tls
       hosts:
-        - homeassistant.localhost
+        - homeassistant.lan
 
 resources:
   requests:

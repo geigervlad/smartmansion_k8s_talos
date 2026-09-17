@@ -33,9 +33,9 @@ at this scale.
   [`gitops/sealed-secrets/`](../gitops/sealed-secrets/) — see
   [`05-sealed-secrets.md`](05-sealed-secrets.md) for why generated secrets
   live in that one folder instead of next to OnlyOffice itself) — without
-  this, anyone who can reach `onlyoffice.localhost` could ask it to render
+  this, anyone who can reach `onlyoffice.lan` could ask it to render
   arbitrary documents.
-- Ingress at `onlyoffice.localhost`.
+- Ingress at `onlyoffice.lan`.
 
 ## Connecting it to Nextcloud (one-time manual step)
 
@@ -54,7 +54,7 @@ pretending it's fully declarative.
    NC_POD=$(kubectl --kubeconfig kubeconfig -n nextcloud get pod -l app.kubernetes.io/name=nextcloud -o jsonpath='{.items[0].metadata.name}')
 
    kubectl --kubeconfig kubeconfig -n nextcloud exec "$NC_POD" -- php occ app:install onlyoffice
-   kubectl --kubeconfig kubeconfig -n nextcloud exec "$NC_POD" -- php occ config:app:set onlyoffice DocumentServerUrl --value="https://onlyoffice.localhost/"
+   kubectl --kubeconfig kubeconfig -n nextcloud exec "$NC_POD" -- php occ config:app:set onlyoffice DocumentServerUrl --value="https://onlyoffice.lan/"
    kubectl --kubeconfig kubeconfig -n nextcloud exec "$NC_POD" -- php occ config:app:set onlyoffice jwt_secret --value="<value from step 1>"
    ```
 3. Optional but recommended: point the internal request path at the
@@ -62,7 +62,7 @@ pretending it's fully declarative.
    (faster, one less hop through cert-manager's TLS):
    ```bash
    kubectl --kubeconfig kubeconfig -n nextcloud exec "$NC_POD" -- php occ config:app:set onlyoffice DocumentServerInternalUrl --value="http://onlyoffice-documentserver.onlyoffice.svc.cluster.local/"
-   kubectl --kubeconfig kubeconfig -n nextcloud exec "$NC_POD" -- php occ config:app:set onlyoffice StorageUrl --value="https://nextcloud.localhost/"
+   kubectl --kubeconfig kubeconfig -n nextcloud exec "$NC_POD" -- php occ config:app:set onlyoffice StorageUrl --value="https://nextcloud.lan/"
    ```
 4. In Nextcloud → Settings → ONLYOFFICE, confirm it shows a green
    "connection established" status.

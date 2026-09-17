@@ -91,6 +91,6 @@ kubectl --kubeconfig kubeconfig -n argocd port-forward svc/argocd-server 8080:44
 # https://localhost:8080, admin / $(cat secrets-vault/argocd-admin-password.txt)
 ```
 (that `localhost` is the port-forward's own loopback address, unrelated to
-this project's `*.localhost` domains) or `https://argocd.localhost` once
+this project's `*.lan` domains) or `https://argocd.lan` once
 `scripts/11-configure-hosts.sh` has run — see
 [`09-cert-manager-dns.md`](09-cert-manager-dns.md).

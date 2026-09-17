@@ -44,5 +44,5 @@ mkdir -p "${REPO_ROOT}/secrets-vault"
 kubectl_ctx -n "${CM_NAMESPACE}" get secret smartmansion-internal-ca -o jsonpath='{.data.ca\.crt}' \
   | base64 -d > "${REPO_ROOT}/secrets-vault/smartmansion-ca.crt"
 log_warn "Wrote secrets-vault/smartmansion-ca.crt (gitignored — it's your device's trust decision, not something to commit)."
-log_warn "Import it into your OS/browser trust store to avoid TLS warnings on *.localhost — see docu/09-cert-manager-dns.md. Not done automatically."
+log_warn "Import it into your OS/browser trust store to avoid TLS warnings on *.lan — see docu/09-cert-manager-dns.md. Not done automatically."
 log_info "Next: ./scripts/07-install-storage.sh"

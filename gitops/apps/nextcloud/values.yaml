@@ -10,9 +10,9 @@
 # scripts/09-generate-app-secrets.sh into gitops/sealed-secrets/nextcloud-secrets.yaml
 # — see that script for exactly which keys exist in "nextcloud-secrets".
 nextcloud:
-  host: nextcloud.localhost
+  host: nextcloud.lan
   trustedDomains:
-    - nextcloud.localhost
+    - nextcloud.lan
   existingSecret:
     enabled: true
     secretName: nextcloud-secrets
@@ -83,7 +83,7 @@ ingress:
   tls:
     - secretName: nextcloud-tls
       hosts:
-        - nextcloud.localhost
+        - nextcloud.lan
 
 resources:
   requests:

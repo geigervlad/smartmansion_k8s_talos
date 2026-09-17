@@ -39,7 +39,7 @@ pointed at them via `externalDatabase`/`externalRedis`:
   `phpClientHttpsFix.enabled: true` tells Nextcloud to trust that and
   generate `https://` links/redirects instead of `http://`. Without this,
   login redirects and most links come out broken.
-- **Ingress**: `nextcloud.localhost`, via Cilium's Ingress Controller,
+- **Ingress**: `nextcloud.lan`, via Cilium's Ingress Controller,
   `cert-manager.io/cluster-issuer: smartmansion-internal` (the self-signed
   internal CA — see [`09-cert-manager-dns.md`](09-cert-manager-dns.md)).
 - **Credentials**: `nextcloud-secrets` (in
@@ -60,7 +60,7 @@ pointed at them via `externalDatabase`/`externalRedis`:
 cat secrets-vault/app-secrets.env | grep NEXTCLOUD_ADMIN_PASSWORD
 ```
 
-Username is `admin`. Log in at `https://nextcloud.localhost` (needs
+Username is `admin`. Log in at `https://nextcloud.lan` (needs
 `scripts/11-configure-hosts.sh` to have run — see
 [`09-cert-manager-dns.md`](09-cert-manager-dns.md)).
 

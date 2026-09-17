@@ -5,7 +5,7 @@
 #
 # fromEntities: [ingress] is Cilium's own identity for traffic arriving via
 # its built-in Ingress Controller (see gitops/infrastructure/cilium/values.yaml)
-# — this is what lets https://nextcloud.localhost reach the pod at all.
+# — this is what lets https://nextcloud.lan reach the pod at all.
 # fromEndpoints: [{}] allows same-namespace traffic (nextcloud <-> its postgresql/redis pods).
 # The onlyoffice namespace is allowed explicitly both ways (this file + the
 # matching rule in gitops/apps/onlyoffice/network-policy.yaml) for the

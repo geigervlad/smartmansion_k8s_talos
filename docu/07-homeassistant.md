@@ -30,7 +30,7 @@ your router/VLAN setup, not this cluster. `dnsPolicy: ClusterFirstWithHostNet`
 
 ## Accessing it
 
-- `https://homeassistant.localhost` (via the Ingress + cert-manager, same
+- `https://homeassistant.lan` (via the Ingress + cert-manager, same
   pattern as the other apps).
 - Directly at `http://<node-ip>:8123` on whichever of the 3 workers it's
   currently scheduled to (`kubectl -n homeassistant get pods -o wide`) — no
@@ -44,6 +44,38 @@ Home Assistant's own setup wizard runs on first access at the URL above —
 create the admin account there (not generated/sealed by this repo, unlike
 Nextcloud). Config persists to a 10Gi `local-path` PVC.
 
+`configuration.enabled: true` in `values.yaml` makes the chart manage
+`configuration.yaml` (and, on a genuinely fresh install only, seed
+`/config/.storage/http` with `use_x_forwarded_for`/`trusted_proxies` — see
+"Common issues" below for why that matters and what to do if it wasn't
+applied). It only touches the config on first creation, never overwrites an
+existing file — your own edits via the UI or `configuration.yaml` itself are
+safe.
+
+## Common issues
+
+- **`https://homeassistant.lan` returns a bare "400: Bad Request"**
+  (direct access at `http://<node-ip>:8123` works fine): Home Assistant
+  2026.8+ rejects requests arriving through a reverse proxy unless
+  `use_x_forwarded_for`/`trusted_proxies` are set in its UI-managed
+  `/config/.storage/http` — the chart only seeds that file automatically on
+  a genuinely fresh install (`configuration.enabled: true`, the default
+  here since this was fixed — see `values.yaml`). If you're hitting this on
+  an *already-onboarded* instance (upgraded from before this was enabled,
+  or restored from a backup), patch it once by hand and restart:
+  ```bash
+  kubectl --kubeconfig kubeconfig -n homeassistant exec homeassistant-home-assistant-0 -- python3 -c "
+  import json
+  with open('/config/.storage/http') as f:
+      d = json.load(f)
+  d['data']['stable']['use_x_forwarded_for'] = True
+  d['data']['stable']['trusted_proxies'] = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '127.0.0.0/8']
+  with open('/config/.storage/http', 'w') as f:
+      json.dump(d, f, indent=2)
+  "
+  kubectl --kubeconfig kubeconfig -n homeassistant rollout restart statefulset/homeassistant-home-assistant
+  ```
+
 ## Extending this (out of scope here, but common next steps)
 
 - **USB Zigbee/Z-Wave dongles**: the chart supports `additionalVolumes` /
@@ -53,8 +85,3 @@ Nextcloud). Config persists to a 10Gi `local-path` PVC.
 - **Static node placement**: add `nodeSelector` in `values.yaml` if you want
   it pinned to one specific worker (e.g. the one physically closest to a USB
   dongle).
-- **Custom `configuration.yaml`**: the chart can manage it declaratively via
-  `configuration.enabled: true` — left off here (`false`, the default) so
-  Home Assistant's own UI-managed config from the setup wizard isn't
-  overwritten on every sync; see the chart's `configuration.templateConfig`
-  value if you want to switch to a fully declarative config file later.

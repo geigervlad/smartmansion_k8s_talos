@@ -1,7 +1,7 @@
 # The ONLY ClusterIssuer in this project — a self-signed internal CA. Zero
 # external dependencies (no ACME account, no DNS-01, no public DNS
 # reachability at all): works entirely offline, which fits this project's
-# .localhost-only access model (see docu/09-cert-manager-dns.md). Every app
+# .lan-only access model (see docu/09-cert-manager-dns.md). Every app
 # Ingress uses cert-manager.io/cluster-issuer: smartmansion-internal.
 #
 # Devices need the CA certificate imported once to avoid browser TLS
