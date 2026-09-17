@@ -15,15 +15,16 @@ creates more `Application` resources in the `argocd` namespace.
 
 ```
 root-app.yaml
-  ├─ gitops/infrastructure/cilium/application.yaml            (wave -10)
-  ├─ gitops/infrastructure/sealed-secrets/application.yaml     (wave -5)
-  ├─ gitops/infrastructure/cert-manager/application.yaml       (wave -5)
-  ├─ gitops/infrastructure/cert-manager/application-config.yaml (wave -4, needs cert-manager CRDs)
+  ├─ gitops/infrastructure/cilium/application.yaml              (wave -10)
+  ├─ gitops/infrastructure/cilium/application-config.yaml       (wave -9, LB-IPAM pool + L2 policy, needs Cilium CRDs)
+  ├─ gitops/infrastructure/sealed-secrets/application.yaml      (wave -5)
+  ├─ gitops/infrastructure/cert-manager/application.yaml        (wave -5)
   ├─ gitops/infrastructure/local-path-provisioner/application.yaml (wave -5)
-  ├─ gitops/infrastructure/dyndns-updater/application.yaml     (wave -5)
-  ├─ gitops/apps/nextcloud/application.yaml                    (wave 0, default)
-  ├─ gitops/apps/onlyoffice/application.yaml                   (wave 0, default)
-  └─ gitops/apps/homeassistant/application.yaml                (wave 0, default)
+  ├─ gitops/sealed-secrets/application.yaml                     (wave -4, every generated SealedSecret — see docu/05)
+  ├─ gitops/infrastructure/cert-manager/application-config.yaml (wave -3, needs cert-manager's own CRDs)
+  ├─ gitops/apps/nextcloud/application.yaml                     (wave 0, default)
+  ├─ gitops/apps/onlyoffice/application.yaml                    (wave 0, default)
+  └─ gitops/apps/homeassistant/application.yaml                 (wave 0, default)
 ```
 
 Sync waves (`argocd.argoproj.io/sync-wave` annotation) enforce ordering:
@@ -38,9 +39,9 @@ Every other infrastructure component follows "installed once by a
 pointed at the exact same config" — intentional, so there's a single source
 of truth and no drift between the bootstrap install and the ongoing
 GitOps-managed one. For the Helm-based ones (Cilium, SealedSecrets,
-cert-manager) that's a shared `values.yaml`; for the two with no Helm chart
-(dyndns-updater, local-path-provisioner) it's the same vendored raw
-manifest file both the script and ArgoCD apply.
+cert-manager) that's a shared `values.yaml`; for the one with no Helm chart
+(local-path-provisioner) it's the same vendored raw manifest file both the
+script and ArgoCD apply.
 
 ArgoCD is the one exception (see
 [`gitops/infrastructure/argocd/values.yaml`](../gitops/infrastructure/argocd/values.yaml)):
@@ -70,15 +71,18 @@ used — they're meant to be identical (same file).
 ## Multi-source Applications (why some `application.yaml` files look unusual)
 
 Charts hosted in an external Helm repo (Cilium, cert-manager, sealed-secrets,
-Nextcloud) can't read a `values.yaml` living in *this* git repo
-directly — ArgoCD's multi-source `sources:` + `$values` reference pattern is
-used to combine "chart from Helm repo X" with "values file from git repo Y"
-in one Application. Where there's no Helm chart at all (OnlyOffice, Home
-Assistant, local-path-provisioner, and the cert-manager/dyndns-updater raw
-manifests), a plain single-`source` directory sync is used instead, with
-`directory.include`/`directory.exclude`
-skipping the Application's own `application.yaml` (already applied by
-root-app, at a different destination).
+Nextcloud, Home Assistant) can't read a `values.yaml` living in *this* git
+repo directly — ArgoCD's multi-source `sources:` + `$values` reference
+pattern is used to combine "chart from Helm repo X" with "values file from
+git repo Y" (and, for Nextcloud/Home Assistant, a third source directory-
+syncing their own `namespace.yaml`/`network-policy.yaml`/raw manifests) in
+one Application. Where there's no Helm chart at all (OnlyOffice,
+local-path-provisioner, `gitops/sealed-secrets/`, and the
+cilium/cert-manager raw-manifest config directories), a plain
+single-`source` directory sync is used instead, with
+`directory.include`/`directory.exclude` skipping the Application's own
+`application.yaml` (already applied by root-app, at a different
+destination).
 
 ## Access
 
@@ -86,5 +90,7 @@ root-app, at a different destination).
 kubectl --kubeconfig kubeconfig -n argocd port-forward svc/argocd-server 8080:443
 # https://localhost:8080, admin / $(cat secrets-vault/argocd-admin-password.txt)
 ```
-or `https://argocd.smartmansion.de` once cert-manager/DNS are working (see
-[`09-cert-manager-dns.md`](09-cert-manager-dns.md)).
+(that `localhost` is the port-forward's own loopback address, unrelated to
+this project's `*.localhost` domains) or `https://argocd.localhost` once
+`scripts/11-configure-hosts.sh` has run — see
+[`09-cert-manager-dns.md`](09-cert-manager-dns.md).

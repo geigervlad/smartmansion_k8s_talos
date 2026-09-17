@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
-# Installs cert-manager, then the vendored community deSEC DNS-01 webhook
-# (gitops/infrastructure/cert-manager/manifests/desec-webhook.yaml — see
-# docu/09-cert-manager-dns.md for why this path was chosen over the
-# officially-supported alternatives) and the ClusterIssuers that use it.
+# Installs cert-manager, then the ClusterIssuers
+# (gitops/infrastructure/cert-manager/manifests/cluster-issuers.yaml) — just
+# one, a self-signed internal CA. No ACME account, no DNS-01 webhook, no
+# public DNS involved at all — see docu/09-cert-manager-dns.md for why.
 #
-# This script does NOT create the desec-token secret — that's a manually
-# obtained credential, collected and sealed by scripts/09-generate-app-secrets.sh.
-# Real certificates won't issue until that secret exists AND the Strato NS
-# delegation described in docu/09-cert-manager-dns.md is done; neither
-# blocks this script from completing.
+# Also exports the CA's public certificate to secrets-vault/smartmansion-ca.crt
+# once it issues, so it's ready to import into your OS/browser trust store
+# (a manual step, by design — see docu/09-cert-manager-dns.md; this script
+# never touches your system trust store itself).
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 
@@ -30,22 +29,20 @@ kubectl_ctx -n "${CM_NAMESPACE}" rollout status deployment/cert-manager --timeou
 kubectl_ctx -n "${CM_NAMESPACE}" rollout status deployment/cert-manager-webhook --timeout=180s
 kubectl_ctx -n "${CM_NAMESPACE}" rollout status deployment/cert-manager-cainjector --timeout=180s
 
-log_step "Deploying the deSEC DNS-01 webhook"
-kubectl_ctx apply -f "${REPO_ROOT}/gitops/infrastructure/cert-manager/manifests/desec-webhook.yaml"
-
-log_info "Waiting for the desec-webhook APIService to become Available (can take ~1-2min for its self-signed cert chain to issue)..."
-apiservice_available() {
-  kubectl_ctx get apiservice v1alpha1.acme.ukmetrics.ca \
-    -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' | grep -q True
-}
-wait_for "desec-webhook APIService Available" 180 apiservice_available
-
-log_step "Applying ClusterIssuers (letsencrypt-staging, letsencrypt-prod, selfsigned fallback)"
+log_step "Applying the internal CA ClusterIssuer"
 kubectl_ctx apply -f "${REPO_ROOT}/gitops/infrastructure/cert-manager/manifests/cluster-issuers.yaml"
 
-log_warn "Real Let's Encrypt certs won't issue yet — two things are still needed:"
-log_warn "  1. scripts/09-generate-app-secrets.sh must seal your deSEC API token into"
-log_warn "     gitops/infrastructure/cert-manager/manifests/desec-token-sealed-secret.yaml"
-log_warn "  2. The one-time Strato NS delegation for _acme-challenge.<domain> -> deSEC."
-log_warn "See docu/09-cert-manager-dns.md for the exact steps. Neither blocks the rest of this pipeline."
+log_info "Waiting for the internal CA certificate to be issued..."
+internal_ca_ready() {
+  kubectl_ctx -n "${CM_NAMESPACE}" get certificate smartmansion-internal-ca \
+    -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' | grep -q True
+}
+wait_for "smartmansion-internal-ca certificate Ready" 120 internal_ca_ready
+
+log_step "Exporting the internal CA certificate"
+mkdir -p "${REPO_ROOT}/secrets-vault"
+kubectl_ctx -n "${CM_NAMESPACE}" get secret smartmansion-internal-ca -o jsonpath='{.data.ca\.crt}' \
+  | base64 -d > "${REPO_ROOT}/secrets-vault/smartmansion-ca.crt"
+log_warn "Wrote secrets-vault/smartmansion-ca.crt (gitignored — it's your device's trust decision, not something to commit)."
+log_warn "Import it into your OS/browser trust store to avoid TLS warnings on *.localhost — see docu/09-cert-manager-dns.md. Not done automatically."
 log_info "Next: ./scripts/07-install-storage.sh"

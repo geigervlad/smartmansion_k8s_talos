@@ -1,0 +1,23 @@
+# Makes one node at a time answer ARP for the IP handed out by
+# lb-ipam-pool.yaml (Cilium elects a leader and fails over automatically if
+# that node goes down) — this is what makes INGRESS_VIP actually reachable
+# from the LAN, not just allocated.
+#
+# No serviceSelector restriction ({} = every LoadBalancer/externalIP
+# Service) — fine here, only one exists (cilium-ingress). All 6 nodes are
+# eligible (control-planes are schedulable too, see
+# talos/patches/controlplane.yaml) since ingress traffic can land on any of
+# them. interfaces matches enp0s3 specifically (VirtualBox's emulated e1000
+# NIC name under Talos — see docu/02-talos-setup.md) rather than announcing
+# on every interface a node happens to have.
+apiVersion: cilium.io/v2alpha1
+kind: CiliumL2AnnouncementPolicy
+metadata:
+  name: smartmansion-ingress
+spec:
+  serviceSelector: {}
+  nodeSelector: {}
+  interfaces:
+    - ^enp0s3$
+  externalIPs: true
+  loadBalancerIPs: true

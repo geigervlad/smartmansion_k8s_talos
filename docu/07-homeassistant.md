@@ -30,7 +30,7 @@ your router/VLAN setup, not this cluster. `dnsPolicy: ClusterFirstWithHostNet`
 
 ## Accessing it
 
-- `https://home.smartmansion.de` (via the Ingress + cert-manager, same
+- `https://homeassistant.localhost` (via the Ingress + cert-manager, same
   pattern as the other apps).
 - Directly at `http://<node-ip>:8123` on whichever of the 3 workers it's
   currently scheduled to (`kubectl -n homeassistant get pods -o wide`) — no

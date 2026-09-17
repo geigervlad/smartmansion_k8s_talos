@@ -6,16 +6,18 @@
 ./MASTER.sh
 ```
 
-Runs `scripts/00-check-prereqs.sh` through `scripts/10-bootstrap-argocd-apps.sh`
-in order. Takes a while (VM boot times, Let's Encrypt account registration,
-image pulls) and will pause for interactive input twice:
+Runs `scripts/00-check-prereqs.sh` through `scripts/11-configure-hosts.sh`
+in order. Takes a while (VM boot times, image pulls) and will pause for
+interactive input once:
 
-- `scripts/09-generate-app-secrets.sh` prompts for the deSEC API token and
-  Strato DynDNS username/password (can't be generated — see
-  [`09-cert-manager-dns.md`](09-cert-manager-dns.md)). Pre-fill
-  `secrets-vault/manual-credentials.env` yourself beforehand to skip the prompts.
 - `scripts/10-bootstrap-argocd-apps.sh` asks for confirmation before
   committing and before pushing to your GitHub remote.
+
+`scripts/11-configure-hosts.sh` (the last step) needs an Administrator
+shell — see [`09-cert-manager-dns.md`](09-cert-manager-dns.md). If you ran
+`MASTER.sh` from a normal shell, that one step will fail with a clear
+message; re-run just it from an elevated shell:
+`./MASTER.sh --only 11`.
 
 ## Resuming / re-running
 
@@ -30,14 +32,11 @@ through. To skip straight to a later step:
 
 ## Before the first run
 
-1. Edit `config/cluster.env` — at minimum check `VBOX_BRIDGE_ADAPTER` matches
-   your actual host NIC (`VBoxManage list bridgedifs`) and `GITOPS_REPO_URL`
-   points at your real GitHub project.
-2. Read [`09-cert-manager-dns.md`](09-cert-manager-dns.md) and create the
-   deSEC account / delegated zones *before* running — steps 06-10 will
-   complete without it, but no real certificate will issue until it's done.
-3. Have your Strato DynDNS username/password ready (Strato control panel →
-   domain → DynDNS).
+Edit `config/cluster.env` — at minimum check `VBOX_BRIDGE_ADAPTER` matches
+your actual host NIC (`VBoxManage list bridgedifs`), `GITOPS_REPO_URL`
+points at your real GitHub project, and `INGRESS_VIP` is a genuinely free
+LAN IP (outside your router's DHCP range). No accounts to create, no DNS
+zones to delegate — see [`09-cert-manager-dns.md`](09-cert-manager-dns.md).
 
 ## What each step assumes about the one before it
 
@@ -53,8 +52,9 @@ order is the only supported order.
 ```bash
 kubectl --kubeconfig kubeconfig get nodes                       # 6 Ready
 kubectl --kubeconfig kubeconfig -n argocd get applications       # all Synced/Healthy
-kubectl --kubeconfig kubeconfig get sealedsecrets -A              # one per app + infra credential
-kubectl --kubeconfig kubeconfig get certificate -A                # Ready once DNS-01 validates
+kubectl --kubeconfig kubeconfig get sealedsecrets -A              # one per app secret
+kubectl --kubeconfig kubeconfig get certificate -A                # Ready almost immediately — internal CA, no external validation
+kubectl --kubeconfig kubeconfig -n kube-system get svc cilium-ingress   # EXTERNAL-IP == INGRESS_VIP
 ```
 
 See [`11-troubleshooting.md`](11-troubleshooting.md) if any of those don't

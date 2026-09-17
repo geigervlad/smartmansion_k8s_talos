@@ -297,31 +297,31 @@ permitted`**
   separate mechanism from the VIP, not a duplicate — `kubectl`/`talosctl`/
   ArgoCD from outside the cluster still go through `CLUSTER_VIP`.
 
-## cert-manager / DNS
+## cert-manager / `.localhost`
 
-**`ClusterIssuer` is `Ready` but no certificate ever issues**
-- That's expected until both the deSEC token is sealed AND the Strato NS
-  delegation has propagated — see [`09-cert-manager-dns.md`](09-cert-manager-dns.md).
-- `kubectl --kubeconfig kubeconfig -n <app-ns> describe certificate <name>`
-  and `describe challenge` (if one exists) show the actual DNS-01 failure
-  reason.
-- `dig NS _acme-challenge.smartmansion.de` should return deSEC's nameservers
-  — if it doesn't, the Strato delegation hasn't propagated yet (can take
-  hours) or wasn't entered correctly.
+**`ClusterIssuer smartmansion-internal` is not `Ready`**
+- Check the CA `Certificate` itself first:
+  `kubectl --kubeconfig kubeconfig -n cert-manager describe certificate
+  smartmansion-internal-ca` — the ClusterIssuer can't be Ready until that
+  Certificate (and the `selfsigned-bootstrap` ClusterIssuer behind it) is.
+  There's no external dependency here at all (no DNS, no ACME account), so
+  this should self-resolve within seconds unless cert-manager itself isn't
+  healthy — check `kubectl -n cert-manager get pods`.
 
-**`desec-webhook` pod CrashLoopBackOff or APIService never `Available`**
-- `kubectl --kubeconfig kubeconfig -n cert-manager logs deploy/desec-webhook`
-- This is an unpinned (`:latest`) community image — if it suddenly breaks
-  after previously working, check
-  https://github.com/kmorning/cert-manager-webhook-desec for upstream
-  changes before assuming the vendored manifest is wrong. Fallback: switch
-  the affected Ingress's `cert-manager.io/cluster-issuer` annotation to
-  `smartmansion-internal` (see [`09-cert-manager-dns.md`](09-cert-manager-dns.md)).
+**A `*.localhost` domain doesn't resolve, or a browser shows "can't reach
+this site" rather than a certificate warning**
+- This is a DNS/routing problem, not a cert-manager one. See the
+  troubleshooting section of [`09-cert-manager-dns.md`](09-cert-manager-dns.md)
+  — check the Windows hosts file has the entry
+  (`scripts/11-configure-hosts.sh` must be run from an Administrator shell),
+  then check `kubectl -n kube-system get svc cilium-ingress` actually has
+  `EXTERNAL-IP` set to `INGRESS_VIP`.
 
-**Hit a Let's Encrypt rate limit**
-- You were issuing against `letsencrypt-prod` directly instead of testing
-  with `letsencrypt-staging` first. Wait out the rate limit window (up to a
-  week for repeated failures) and switch to staging until it issues cleanly.
+**Browser still shows a certificate warning after importing
+`secrets-vault/smartmansion-ca.crt`**
+- Fully close and reopen the browser — most cache trust decisions per
+  connection, not per page load. Firefox keeps its own certificate store
+  separate from Windows' — import there too if you use it.
 
 ## ArgoCD / GitOps
 
@@ -418,8 +418,54 @@ image this project actually wants to run**
   its own `metadata.namespace`, so this is purely an organizational change —
   a new `sealed-secrets-data` Application (sync-wave `-4`) syncs the whole
   folder. `cert-manager-config` moved from wave `-4` to `-3` to stay after
-  it (its ClusterIssuers reference the `desec-token` secret that used to
-  live next to them and now lives here instead).
+  it (originally so its ClusterIssuers could reference a secret sealed
+  there — moot now that cert-manager's DNS-01 setup was removed entirely,
+  see the section below, but the wave ordering was kept since there's no
+  reason to move it back).
+
+## Moved to LAN-only access: internal CA, `.localhost`, no more public DNS (2026-09)
+
+This project originally used `smartmansion.de` + Let's Encrypt (via a
+deSEC.io DNS-01 delegation, since Strato has no ACME API) + a DynDNS updater
+keeping the A records pointed at a changing public IP — all of that existed
+purely to get a publicly-trusted certificate for a domain reachable from the
+internet. Once the access model settled on "LAN/VPN only, never actually
+reachable from the internet," none of it was still earning its complexity,
+so it was removed outright:
+
+- **Removed entirely**: the `dyndns-updater` component (its own namespace,
+  CronJob, and sealed credentials), the `cert-manager-webhook-desec`
+  community webhook, the `letsencrypt-staging`/`letsencrypt-prod`
+  ClusterIssuers, `DESEC_API_TOKEN`/`STRATO_DYNDNS_USER`/
+  `STRATO_DYNDNS_PASSWORD` prompts from `scripts/09-generate-app-secrets.sh`
+  (nothing in this project needs a manually-provided credential anymore —
+  every secret is now auto-generated), and the whole "manually-provided
+  credential" code path in that script (`prompt_if_missing`,
+  `secrets-vault/manual-credentials.env`) since nothing used it once those
+  three were gone.
+- **Kept and promoted**: the `smartmansion-internal` self-signed
+  ClusterIssuer already existed as a documented fallback — it's now the
+  *only* ClusterIssuer. See [`09-cert-manager-dns.md`](09-cert-manager-dns.md).
+- **New**: every domain is `*.localhost` (`DOMAIN_NEXTCLOUD` etc. in
+  `config/cluster.env`), resolved via a plain Windows hosts-file entry
+  (`scripts/11-configure-hosts.sh`, needs an Administrator shell) rather
+  than any DNS server at all.
+- **New, to make `*.localhost` actually reachable on real ports (80/443, not
+  a NodePort)**: Cilium's L2 announcement + LB-IPAM features are now enabled
+  (`gitops/infrastructure/cilium/values.yaml`), with a
+  `CiliumLoadBalancerIPPool` (one IP, `INGRESS_VIP`) and a
+  `CiliumL2AnnouncementPolicy` (`gitops/infrastructure/cilium/manifests/`)
+  giving the Ingress Controller's Service a real, ARP-announced LAN IP.
+  Without this, a bare-metal `LoadBalancer`-type Service just sits at
+  `EXTERNAL-IP=<pending>` forever — there's no cloud provider here to
+  allocate one.
+- **Caveat inherited from this whole approach, not a bug**: `.localhost` is
+  an RFC 6761 reserved TLD that some resolvers hardcode to `127.0.0.1`
+  regardless of the hosts file. Windows itself checks the hosts file first
+  (confirmed working), but a specific browser/resolver might not — see
+  [`09-cert-manager-dns.md`](09-cert-manager-dns.md) for the fix
+  (`DOMAIN_*` is just config, swap the suffix and re-run
+  `scripts/11-configure-hosts.sh`).
 
 ## SealedSecrets
 

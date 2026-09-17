@@ -1,0 +1,16 @@
+# Gives Cilium's LB-IPAM a single IP to hand out to LoadBalancer-type
+# Services — in practice just the one "cilium-ingress" Service that
+# ingressController.enabled creates (gitops/infrastructure/cilium/values.yaml).
+# No serviceSelector set, so this pool applies to any LoadBalancer Service
+# cluster-wide — fine here, since this project only ever creates the one.
+#
+# IP MUST match INGRESS_VIP in config/cluster.env (not templated — this is a
+# plain committed manifest, keep both in sync by hand if you ever change it).
+apiVersion: cilium.io/v2
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: smartmansion-ingress
+spec:
+  blocks:
+    - start: "192.168.178.56"
+      stop: "192.168.178.56"

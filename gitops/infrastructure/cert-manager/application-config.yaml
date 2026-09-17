@@ -1,11 +1,10 @@
-# Syncs the raw manifests in manifests/ (desec-webhook, ClusterIssuers) —
-# separate from application.yaml (the cert-manager Helm chart itself)
-# because these resources use cert-manager's own CRDs and must be applied
-# strictly after the chart. Wave -3: after gitops/sealed-secrets (wave -4),
-# since the ClusterIssuers reference the desec-token Secret that lives
-# there now (see gitops/sealed-secrets/application.yaml) — the desec-token
-# SealedSecret used to live in manifests/ next to this file, moved out so
-# every generated secret lives in one place.
+# Syncs the raw manifests in manifests/ (cluster-issuers.yaml — the
+# self-signed internal CA, see docu/09-cert-manager-dns.md) — separate from
+# application.yaml (the cert-manager Helm chart itself) because these
+# resources use cert-manager's own CRDs and must be applied strictly after
+# the chart. Wave -3: after gitops/sealed-secrets (wave -4) — no actual
+# dependency between them anymore (this ClusterIssuer needs no secret), but
+# there's no reason to reorder it back either.
 #
 # repoURL below is already set to this project's GitHub repo. If you fork or
 # rename it, update GITOPS_REPO_URL in config/cluster.env and re-run

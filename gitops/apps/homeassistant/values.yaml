@@ -34,16 +34,16 @@ ingress:
   enabled: true
   className: cilium
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-staging   # switch to letsencrypt-prod once validated, see docu/09-cert-manager-dns.md
+    cert-manager.io/cluster-issuer: smartmansion-internal   # self-signed internal CA, see docu/09-cert-manager-dns.md
   hosts:
-    - host: home.smartmansion.de
+    - host: homeassistant.localhost
       paths:
         - path: /
           pathType: Prefix
   tls:
     - secretName: homeassistant-tls
       hosts:
-        - home.smartmansion.de
+        - homeassistant.localhost
 
 resources:
   requests:

@@ -10,9 +10,9 @@
 # scripts/09-generate-app-secrets.sh into gitops/sealed-secrets/nextcloud-secrets.yaml
 # — see that script for exactly which keys exist in "nextcloud-secrets".
 nextcloud:
-  host: smartmansion.de
+  host: nextcloud.localhost
   trustedDomains:
-    - smartmansion.de
+    - nextcloud.localhost
   existingSecret:
     enabled: true
     secretName: nextcloud-secrets
@@ -79,11 +79,11 @@ ingress:
   enabled: true
   className: cilium
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-staging   # switch to letsencrypt-prod once validated, see docu/09-cert-manager-dns.md
+    cert-manager.io/cluster-issuer: smartmansion-internal   # self-signed internal CA, see docu/09-cert-manager-dns.md
   tls:
     - secretName: nextcloud-tls
       hosts:
-        - smartmansion.de
+        - nextcloud.localhost
 
 resources:
   requests:

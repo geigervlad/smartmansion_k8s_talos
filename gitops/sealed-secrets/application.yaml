@@ -7,10 +7,9 @@
 # this directory is only ever the encrypted output of that controller.
 #
 # Sync-wave -4: strictly after the controller (wave -5, so the SealedSecret
-# CRD + decrypting webhook already exist) and strictly before
-# cert-manager-config (wave -3, which needs desec-token to exist for its
-# ClusterIssuers) and every app (default wave 0, all of which need their own
-# secret decrypted into a real Secret before their pods can start).
+# CRD + decrypting webhook already exist) and strictly before every app
+# (default wave 0, all of which need their own secret decrypted into a real
+# Secret before their pods can start).
 #
 # repoURL below is already set to this project's GitHub repo. If you fork or
 # rename it, update GITOPS_REPO_URL in config/cluster.env and re-run

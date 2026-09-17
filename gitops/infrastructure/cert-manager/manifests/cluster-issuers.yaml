@@ -1,66 +1,13 @@
-# ClusterIssuers for Let's Encrypt via DNS-01 through the vendored deSEC
-# webhook (desec-webhook.yaml, same directory). Requires:
-#   1. A "desec-token" Secret in the cert-manager namespace (SealedSecret
-#      written by scripts/09-generate-app-secrets.sh) holding your deSEC.io
-#      account API token.
-#   2. The one-time Strato NS delegation of _acme-challenge.<domain> to
-#      deSEC's nameservers for each of the 3 domains — see
-#      docu/09-cert-manager-dns.md. Certificates simply won't validate until
-#      this is done; the ClusterIssuer itself will still show Ready (that
-#      only means the ACME account registered successfully).
+# The ONLY ClusterIssuer in this project — a self-signed internal CA. Zero
+# external dependencies (no ACME account, no DNS-01, no public DNS
+# reachability at all): works entirely offline, which fits this project's
+# .localhost-only access model (see docu/09-cert-manager-dns.md). Every app
+# Ingress uses cert-manager.io/cluster-issuer: smartmansion-internal.
 #
-# Always test against letsencrypt-staging first (Let's Encrypt's production
-# server has tight rate limits — a typo-driven retry loop can lock you out
-# for a week). Switch an Ingress's cert-manager.io/cluster-issuer annotation
-# from "letsencrypt-staging" to "letsencrypt-prod" only once staging issues
-# cleanly (`kubectl describe certificate ...` shows Ready).
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: letsencrypt-staging
-spec:
-  acme:
-    email: geiger.vlad.mihaly@gmail.com
-    server: https://acme-staging-v02.api.letsencrypt.org/directory
-    privateKeySecretRef:
-      name: letsencrypt-staging-account-key
-    solvers:
-      - selector: {}
-        dns01:
-          webhook:
-            groupName: acme.ukmetrics.ca
-            solverName: desec
-            config:
-              apiTokenSecretRef:
-                name: desec-token
-                key: token
----
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: letsencrypt-prod
-spec:
-  acme:
-    email: geiger.vlad.mihaly@gmail.com
-    server: https://acme-v02.api.letsencrypt.org/directory
-    privateKeySecretRef:
-      name: letsencrypt-prod-account-key
-    solvers:
-      - selector: {}
-        dns01:
-          webhook:
-            groupName: acme.ukmetrics.ca
-            solverName: desec
-            config:
-              apiTokenSecretRef:
-                name: desec-token
-                key: token
----
-# Fallback with zero external dependencies (no deSEC account, no Strato NS
-# delegation, no internet reachability needed at all) — swap an Ingress to
-# this issuer if the deSEC path ever breaks. Devices need to import
-# secrets-vault/smartmansion-ca.crt once to trust it without a browser warning
-# (see docu/09-cert-manager-dns.md).
+# Devices need the CA certificate imported once to avoid browser TLS
+# warnings — scripts/06-install-cert-manager.sh exports it to
+# secrets-vault/smartmansion-ca.crt after this issues; see
+# docu/09-cert-manager-dns.md for the (manual, by design) import step.
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
@@ -75,7 +22,8 @@ metadata:
   namespace: cert-manager
 spec:
   secretName: smartmansion-internal-ca
-  duration: 43800h # 5y
+  duration: 87600h # 10y
+  renewBefore: 720h # 30d
   isCA: true
   commonName: "smartmansion internal CA"
   issuerRef:

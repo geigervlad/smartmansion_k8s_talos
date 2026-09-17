@@ -8,8 +8,9 @@
 # scripts/03-bootstrap-cluster.sh then does the remaining cluster-wide tail
 # (finalize talosconfig endpoints, fetch kubeconfig) once all 6 nodes are
 # up. From there: installs Cilium/SealedSecrets/cert-manager/
-# local-path-provisioner/ArgoCD, generates and seals all secrets, and
-# pushes this repo so ArgoCD can take over via GitOps.
+# local-path-provisioner/ArgoCD, generates and seals all secrets, pushes
+# this repo so ArgoCD can take over via GitOps, then points the *.localhost
+# domains at the cluster in your Windows hosts file.
 #
 # Safe to re-run: every scripts/NN-*.sh is written to check current state
 # first and skip what's already done (see scripts/lib/common.sh). If a step
@@ -17,7 +18,7 @@
 # from a specific step with --from.
 #
 # Usage:
-#   ./MASTER.sh              # run everything, 00 through 10
+#   ./MASTER.sh              # run everything, 00 through 11
 #   ./MASTER.sh --from 06    # resume starting at scripts/06-install-cert-manager.sh
 #   ./MASTER.sh --only 09    # run just scripts/09-generate-app-secrets.sh
 set -euo pipefail
@@ -35,6 +36,7 @@ STEPS=(
   08-install-argocd
   09-generate-app-secrets
   10-bootstrap-argocd-apps
+  11-configure-hosts
 )
 
 from="00"

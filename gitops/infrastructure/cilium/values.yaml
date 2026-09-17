@@ -57,6 +57,18 @@ ingressController:
   loadbalancerMode: shared
   default: true
 
+# LB-IPAM + L2 announcements: on bare-metal VirtualBox (no cloud load
+# balancer), a Service of type LoadBalancer — like the one
+# ingressController.enabled creates — would otherwise sit at
+# EXTERNAL-IP=<pending> forever. This makes Cilium itself assign it a real
+# LAN IP (from the CiliumLoadBalancerIPPool in
+# gitops/infrastructure/cilium/manifests/) and answer ARP for it on the
+# bridged interface, so INGRESS_VIP (config/cluster.env) is reachable from
+# any device on the LAN — including the Windows host — on ports 80/443
+# directly, no NodePort, no extra port in the URL.
+l2announcements:
+  enabled: true
+
 hubble:
   enabled: true
   relay:

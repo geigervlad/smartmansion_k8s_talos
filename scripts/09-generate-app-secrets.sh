@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
-# The one place that collects/generates every secret this repo needs and
-# seals each into gitops/sealed-secrets/ as a SealedSecret — safe to commit,
-# only decryptable by the SealedSecrets controller running in this specific
+# The one place that generates every secret this repo needs and seals each
+# into gitops/sealed-secrets/ as a SealedSecret — safe to commit, only
+# decryptable by the SealedSecrets controller running in this specific
 # cluster (see scripts/05-install-sealed-secrets.sh). Every generated
 # SealedSecret lives in that one folder regardless of which namespace it
 # targets — see gitops/sealed-secrets/application.yaml.
 #
-# Two kinds of secret:
-#   - Manually-provided (deSEC API token, Strato DynDNS login): can't be
-#     generated, prompted for interactively once and cached in
-#     secrets-vault/manual-credentials.env (gitignored) so re-runs don't ask again.
-#   - Auto-generated (Nextcloud/OnlyOffice passwords): random, generated once
-#     and cached in secrets-vault/app-secrets.env (gitignored).
+# Everything here is auto-generated (openssl rand, via random_password() in
+# scripts/lib/common.sh) and cached in secrets-vault/app-secrets.env
+# (gitignored) — nothing in this project needs a manually-provided,
+# can't-be-generated credential anymore (no deSEC/Strato DNS-01, no DynDNS —
+# see docu/09-cert-manager-dns.md for why).
 #
 # Re-running this script is safe: it only ever fills in what's missing, it
 # never rotates an existing SealedSecret (that would desync from whatever
@@ -20,55 +19,11 @@ set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 
 VAULT="${REPO_ROOT}/secrets-vault"
-CREDS_FILE="${VAULT}/manual-credentials.env"
 APP_SECRETS_FILE="${VAULT}/app-secrets.env"
 SEALED_SECRETS_DIR="${REPO_ROOT}/gitops/sealed-secrets"
 mkdir -p "${VAULT}" "${SEALED_SECRETS_DIR}"
 
 [[ -s "${PUB_CERT_PATH}" ]] || die "Missing ${PUB_CERT_PATH} — run ./scripts/05-install-sealed-secrets.sh first."
-
-log_step "Collecting manually-provided credentials"
-
-touch "${CREDS_FILE}"
-# shellcheck disable=SC1090
-source "${CREDS_FILE}"
-
-prompt_if_missing() {
-  local var_name="$1" prompt_text="$2" secret_input="${3:-false}" value
-  if [[ -z "${!var_name:-}" ]]; then
-    if [[ "${secret_input}" == "true" ]]; then
-      read -r -s -p "${prompt_text}: " value; echo
-    else
-      read -r -p "${prompt_text}: " value
-    fi
-    printf -v "${var_name}" '%s' "${value}"
-    echo "${var_name}=${value}" >> "${CREDS_FILE}"
-  fi
-}
-
-prompt_if_missing DESEC_API_TOKEN "deSEC API token (see docu/09-cert-manager-dns.md)" true
-prompt_if_missing STRATO_DYNDNS_USER "Strato DynDNS username"
-prompt_if_missing STRATO_DYNDNS_PASSWORD "Strato DynDNS password" true
-chmod 600 "${CREDS_FILE}"
-
-log_step "Sealing infrastructure credentials"
-
-DESEC_SECRET_OUT="${SEALED_SECRETS_DIR}/desec-token.yaml"
-if file_exists_nonempty "${DESEC_SECRET_OUT}"; then
-  log_info "desec-token SealedSecret already exists, skipping."
-else
-  seal_secret_literals desec-token cert-manager "${DESEC_SECRET_OUT}" -- "token=${DESEC_API_TOKEN}"
-  log_info "Wrote gitops/sealed-secrets/desec-token.yaml"
-fi
-
-DYNDNS_SECRET_OUT="${SEALED_SECRETS_DIR}/dyndns-strato-credentials.yaml"
-if file_exists_nonempty "${DYNDNS_SECRET_OUT}"; then
-  log_info "dyndns-strato-credentials SealedSecret already exists, skipping."
-else
-  seal_secret_literals dyndns-strato-credentials dyndns-updater "${DYNDNS_SECRET_OUT}" -- \
-    "username=${STRATO_DYNDNS_USER}" "password=${STRATO_DYNDNS_PASSWORD}"
-  log_info "Wrote gitops/sealed-secrets/dyndns-strato-credentials.yaml"
-fi
 
 log_step "Generating app secrets"
 
@@ -117,6 +72,6 @@ else
   log_info "Wrote gitops/sealed-secrets/onlyoffice-secrets.yaml"
 fi
 
-log_warn "Raw values are in secrets-vault/app-secrets.env and secrets-vault/manual-credentials.env (both gitignored)."
+log_warn "Raw values are in secrets-vault/app-secrets.env (gitignored)."
 log_warn "Nextcloud admin login will be: admin / (see NEXTCLOUD_ADMIN_PASSWORD in secrets-vault/app-secrets.env)"
 log_info "Next: ./scripts/10-bootstrap-argocd-apps.sh"

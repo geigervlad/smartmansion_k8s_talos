@@ -46,11 +46,10 @@ NetworkPolicies apply identically regardless of which of the 6 a pod lands on.
 VirtualBox (Debian 12 host)
   └─ Talos Linux (immutable, API-managed, minimal attack surface)
        └─ Kubernetes
-            ├─ Cilium              CNI + kube-proxy replacement + Ingress Controller + NetworkPolicy
+            ├─ Cilium              CNI + kube-proxy replacement + Ingress Controller + L2-announced LB IP + NetworkPolicy
             ├─ SealedSecrets        encrypts secrets so they're safe to commit to git
-            ├─ cert-manager         Let's Encrypt certs via DNS-01 (deSEC webhook, see docu/09)
+            ├─ cert-manager         self-signed internal CA, no ACME/public DNS at all (see docu/09)
             ├─ local-path-provisioner  local storage (PVCs for Nextcloud/OnlyOffice/HA) — see docu/02
-            ├─ dyndns-updater       keeps Strato's A records pointed at this homelab's changing public IP
             ├─ ArgoCD               GitOps controller — everything above (except itself) is an Application
             └─ apps: Nextcloud, OnlyOffice, Home Assistant
 ```
@@ -80,7 +79,9 @@ upgrades are atomic image swaps, not `apt upgrade`.
   cluster's controller can decrypt. Losing the controller's private key
   (backed up to `secrets-vault/`, see [`05-sealed-secrets.md`](05-sealed-secrets.md))
   means losing the ability to ever decrypt or rotate them.
-- **cert-manager DNS-01 via deSEC** means no inbound port 80/443 needs to be
-  opened to the internet to get real TLS certificates — see
-  [`09-cert-manager-dns.md`](09-cert-manager-dns.md) for the full reasoning
-  and the community-webhook tradeoff that was knowingly accepted.
+- **cert-manager's self-signed internal CA** means TLS works with zero
+  external dependencies — no public DNS, no inbound port 80/443, no ACME
+  account, nothing reachable from the internet at all. The tradeoff:
+  every device needs the CA certificate imported once to avoid browser
+  warnings — see [`09-cert-manager-dns.md`](09-cert-manager-dns.md) for the
+  full reasoning and why `.localhost` was chosen as the domain suffix.

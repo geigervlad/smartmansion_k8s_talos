@@ -1,7 +1,7 @@
 # Adopts the cert-manager Helm release installed by
 # scripts/06-install-cert-manager.sh into ArgoCD. Sync-wave -5, alongside
-# sealed-secrets. The desec-webhook + ClusterIssuers live in manifests/ and
-# are synced by application-config.yaml at wave -4, since they need
+# sealed-secrets. The internal-CA ClusterIssuer lives in manifests/ and is
+# synced by application-config.yaml at wave -3, since it needs
 # cert-manager's CRDs (Issuer/Certificate) to already exist.
 #
 # repoURL below is already set to this project's GitHub repo. If you fork or

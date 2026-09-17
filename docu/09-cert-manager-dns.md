@@ -1,128 +1,117 @@
-# cert-manager, DNS-01 and Strato
+# cert-manager, the internal CA, and `.localhost`
 
-Strato.de (the DNS provider for `smartmansion.de`) has no ACME-compatible DNS
-management API. That's the whole problem this document works around. It
-covers two *separate* things that both touch Strato's DNS panel:
+This project deliberately has **no public DNS involvement at all**: no
+Let's Encrypt, no ACME account, no DNS-01 challenge, no delegated zone, no
+DynDNS updater keeping an A record pointed at a changing public IP. Access
+is LAN-only, so none of that machinery earns its keep — it existed in an
+earlier version of this project (Strato + deSEC + DynDNS) purely to get a
+publicly-trusted certificate for a domain reachable from the internet, and
+was removed once the access model became "this network, full stop."
 
-1. **DNS-01 challenges** for issuing Let's Encrypt certificates (TXT records).
-2. **DynDNS** for keeping the A records pointed at your changing public IP
-   (see [`gitops/infrastructure/dyndns-updater`](../gitops/infrastructure/dyndns-updater/)).
+## The two pieces
 
-These are independent — you need both, but they don't depend on each other.
+1. **A self-signed internal CA**, created once by
+   [`gitops/infrastructure/cert-manager/manifests/cluster-issuers.yaml`](../gitops/infrastructure/cert-manager/manifests/cluster-issuers.yaml):
+   a bootstrap self-signed `ClusterIssuer`, a CA `Certificate` signed by it,
+   and a second `ClusterIssuer` (`smartmansion-internal`) that signs
+   everything else using that CA. Every app Ingress uses
+   `cert-manager.io/cluster-issuer: smartmansion-internal`.
+2. **`.localhost` domains** (`DOMAIN_NEXTCLOUD` etc. in `config/cluster.env`)
+   resolved by a plain Windows hosts-file entry
+   (`scripts/11-configure-hosts.sh`) pointing every one of them at
+   `INGRESS_VIP` — the one LAN IP Cilium's Ingress Controller announces via
+   L2 (see [`gitops/infrastructure/cilium/manifests/`](../gitops/infrastructure/cilium/manifests/)
+   and [`01-architecture.md`](01-architecture.md)).
 
-## Why DNS-01 at all?
+Neither piece talks to anything outside this network. There's nothing to
+sign up for, no token to obtain, no zone to delegate.
 
-No port 80/443 is exposed to the internet (VPN-only access, per the original
-design discussion), so HTTP-01 challenges are out — Let's Encrypt can't reach
-a webserver on your LAN to validate ownership. DNS-01 only requires that a
-TXT record be publicly *resolvable*, which doesn't require any inbound port
-on your network at all.
+## One-time setup
 
-## Options that were considered
+1. Run the pipeline through `scripts/06-install-cert-manager.sh` — it
+   applies the ClusterIssuers, waits for the CA certificate to issue, and
+   exports its public half to `secrets-vault/smartmansion-ca.crt`
+   (gitignored — regenerate any time with the commands in
+   "Re-exporting the CA cert" below, no need to keep this specific copy safe
+   the way you would the SealedSecrets key).
+2. Run `scripts/11-configure-hosts.sh` **from an Administrator shell**
+   (right-click Git Bash/your terminal → "Run as administrator" — the
+   Windows hosts file isn't writable otherwise) — this is what makes
+   `https://nextcloud.localhost` etc. resolve at all.
+3. Import `secrets-vault/smartmansion-ca.crt` into your OS/browser trust
+   store — not done automatically (see "Why this is manual" below).
+   - **Windows** (PowerShell, run once, no admin needed for `-CurrentUser`):
+     ```powershell
+     Import-Certificate -FilePath secrets-vault\smartmansion-ca.crt -CertStoreLocation Cert:\CurrentUser\Root
+     ```
+   - Firefox keeps its own certificate store, separate from Windows':
+     Settings → Privacy & Security → Certificates → View Certificates →
+     Authorities → Import.
 
-| Option | Verdict |
-|---|---|
-| Plain cert-manager DNS-01 for Strato | **Not possible** — Strato has no supported API. |
-| Official cert-manager RFC2136 / built-in providers | Strato isn't one of them. |
-| Self-hosted **acme-dns** (cert-manager's official answer to "my provider has no API") | Works, but means running your own public authoritative DNS server (port 53 TCP+UDP reachable from the internet) plus a one-time NS delegation. Real operational weight for a homelab. |
-| **Community `cert-manager-webhook-desec`** ← chosen | Delegate just `_acme-challenge.<domain>` to deSEC.io (free, no port exposure needed) and let a small in-cluster webhook talk to deSEC's API on cert-manager's behalf. |
-| Self-signed / internal CA | Zero external dependencies, but every device needs the CA imported once to avoid browser warnings. Kept as `smartmansion-internal` ClusterIssuer fallback either way. |
+Until step 3, every `*.localhost` app in this project loads fine but shows
+a "not secure" / certificate-warning page first — the connection is still
+genuinely TLS-encrypted with a real (if self-signed) cert, browsers just
+don't trust the issuer yet.
 
-**Important honesty note about the chosen option:** `cert-manager-webhook-desec`
-(https://github.com/kmorning/cert-manager-webhook-desec) is a single-maintainer
-community project. There's no published Helm chart (installation is raw
-manifests, vendored into
-[`gitops/infrastructure/cert-manager/manifests/desec-webhook.yaml`](../gitops/infrastructure/cert-manager/manifests/desec-webhook.yaml))
-and no pinned container image tag — it ships as `:latest`. This was a deliberate
-choice made after weighing it against acme-dns and self-signed; if it ever
-breaks (image disappears, upstream changes), the `smartmansion-internal`
-ClusterIssuer is the documented fallback (see below) and doesn't require
-touching anything at Strato.
+### Why this is manual
 
-## One-time setup (do this before real certificates will issue)
+Importing a certificate into your OS/browser trust store affects how your
+machine trusts *everything*, not just this cluster — not something a script
+in this repo should do unattended. It's also a one-time, per-device step:
+do it once per machine you access these apps from, not once per pipeline run.
 
-### 1. Create a deSEC.io account and delegate zones
+## Why `.localhost` specifically, and the one real caveat
 
-1. Sign up for a free account at https://desec.io.
-2. Under "Domains", add these three as separate domains in your deSEC account
-   (deSEC treats each delegated zone as its own "domain" object, even though
-   they're subdomains of `smartmansion.de`):
-   - `_acme-challenge.smartmansion.de`
-   - `_acme-challenge.home.smartmansion.de`
-   - `_acme-challenge.office.smartmansion.de`
-3. deSEC will show you its nameservers for each (normally `ns1.desec.io` and
-   `ns2.desec.io` — double-check in your deSEC dashboard, this has changed
-   historically).
-4. Generate an API **token** under "Tokens" in the deSEC dashboard (account-wide
-   — the same token works for all three delegated zones, so you only need one).
+`.localhost` is reserved by [RFC 6761](https://www.rfc-editor.org/rfc/rfc6761)
+to always mean "this machine" — which is exactly wrong for what this
+project does with it (pointing it at `INGRESS_VIP`, a *different* machine on
+the LAN). Windows' own resolver checks the hosts file first, before any
+built-in handling of reserved TLDs, so this works — but **not every
+resolver does**: some browsers, some DNS-over-HTTPS configurations, and
+some Linux/macOS resolvers hardcode `*.localhost` to `127.0.0.1` and never
+consult the hosts file for it at all. If a specific browser or device won't
+reach these apps no matter what `scripts/11-configure-hosts.sh` writes,
+this is almost certainly why.
 
-### 2. Delegate the zones at Strato
+**The fix, if you hit this**: change `DOMAIN_NEXTCLOUD`/etc. in
+`config/cluster.env` to a suffix that isn't a reserved TLD — e.g.
+`.smartmansion.lan` or `.lab` — update every app's Ingress host
+(`gitops/apps/*/values.yaml` / `deployment.yaml`) to match, then re-run
+`scripts/11-configure-hosts.sh` and push so ArgoCD picks up the new Ingress
+hostnames. No need to touch cert-manager itself — the CA signs whatever
+hostname a Certificate asks for, it doesn't care what the suffix is. This
+is a one-variable-family change by design, precisely because `.localhost`
+might not work everywhere.
 
-In the Strato DNS panel for `smartmansion.de`, add **NS records** (not TXT,
-not A):
+## Re-exporting the CA cert
 
-```
-_acme-challenge.smartmansion.de.        NS   ns1.desec.io.
-_acme-challenge.smartmansion.de.        NS   ns2.desec.io.
-_acme-challenge.home.smartmansion.de.   NS   ns1.desec.io.
-_acme-challenge.home.smartmansion.de.   NS   ns2.desec.io.
-_acme-challenge.office.smartmansion.de. NS   ns1.desec.io.
-_acme-challenge.office.smartmansion.de. NS   ns2.desec.io.
-```
-
-This only delegates those three specific subdomains — everything else about
-`smartmansion.de` (the actual A records, MX, etc.) stays fully managed at
-Strato as before. DNS propagation can take a few hours; verify with:
-
-```bash
-dig NS _acme-challenge.smartmansion.de
-```
-
-### 3. Provide the token to the cluster
-
-`scripts/09-generate-app-secrets.sh` will prompt for the deSEC API token (or
-read it from `secrets-vault/manual-credentials.env` if you pre-filled it) and
-seal it into `gitops/sealed-secrets/desec-token.yaml` (see
-[`05-sealed-secrets.md`](05-sealed-secrets.md) — every generated SealedSecret
-in this repo lives in that one folder, not next to the component it targets).
-Nothing else to do manually — the `letsencrypt-staging`/`letsencrypt-prod`
-ClusterIssuers (applied by `scripts/06-install-cert-manager.sh`) already
-reference that secret by name.
-
-### 4. Issue a real certificate for the first time
-
-Test against **staging** first — Let's Encrypt's production server has tight
-rate limits, and a typo-driven retry loop can lock you out for about a week.
-The app Ingress manifests under `gitops/apps/*/` default to
-`cert-manager.io/cluster-issuer: letsencrypt-staging`. Once
-`kubectl describe certificate -n <namespace> <name>` shows `Ready`, switch the
-annotation to `letsencrypt-prod` and let ArgoCD resync.
-
-## Fallback: self-signed internal CA
-
-`gitops/infrastructure/cert-manager/manifests/cluster-issuers.yaml` also
-creates a `smartmansion-internal` ClusterIssuer backed by a self-signed CA —
-zero external dependencies, works even if deSEC/Strato/the webhook are
-unreachable. To use it, change an Ingress's `cert-manager.io/cluster-issuer`
-annotation to `smartmansion-internal`. Export the CA once and import it on
-your devices to avoid browser warnings:
+If `secrets-vault/smartmansion-ca.crt` ever goes missing (it's gitignored,
+local-only) but the cluster's CA itself is still there:
 
 ```bash
 kubectl --kubeconfig kubeconfig -n cert-manager get secret smartmansion-internal-ca -o jsonpath='{.data.ca\.crt}' | base64 -d > secrets-vault/smartmansion-ca.crt
 ```
 
-Since access is VPN/LAN-only anyway (per the original design), importing one
-CA per device is a one-time, low-friction step — this is the recommended
-fallback, not a lesser option.
-
 ## Troubleshooting
 
-- `kubectl get clusterissuer` shows `Ready` even without the deSEC token or
-  NS delegation done — that condition only reflects successful ACME account
-  *registration* with Let's Encrypt, not that DNS-01 challenges will succeed.
-- `kubectl describe certificaterequest -n <ns> <name>` and
-  `kubectl describe challenge -n <ns>` are the two commands that actually show
-  DNS-01 failures (e.g. "no such host" means the NS delegation hasn't
-  propagated yet, or the deSEC domain wasn't created).
-- `kubectl get apiservice v1alpha1.acme.ukmetrics.ca` should show `Available:
-  True`; if not, check `kubectl -n cert-manager logs deploy/desec-webhook`.
+- **Browser shows "not secure" after importing the CA**: most browsers
+  cache certificate trust decisions per-connection — fully close and
+  reopen the browser (not just the tab).
+- **`kubectl describe certificate -n <ns> <name>` never goes `Ready`**:
+  check `kubectl -n cert-manager get clusterissuer smartmansion-internal`
+  is `Ready` first — if the CA `Certificate` itself never issued,
+  `kubectl -n cert-manager describe certificate smartmansion-internal-ca`
+  is the one to check.
+- **A `*.localhost` domain doesn't resolve, or resolves to `127.0.0.1`
+  instead of `INGRESS_VIP`**: see "Why `.localhost` specifically" above —
+  first confirm the hosts file actually has the entry
+  (`cat /c/Windows/System32/drivers/etc/hosts` from Git Bash, or
+  `type C:\Windows\System32\drivers\etc\hosts` from cmd), then suspect a
+  resolver that ignores it for this TLD.
+- **Domain resolves and the IP is reachable, but nothing answers on 443**:
+  check `kubectl -n kube-system get svc cilium-ingress` has an `EXTERNAL-IP`
+  matching `INGRESS_VIP` — if it's stuck `<pending>`, check
+  `kubectl get ciliumloadbalancerippools` and
+  `kubectl get ciliuml2announcementpolicies` (both cluster-scoped) both
+  exist (see
+  [`gitops/infrastructure/cilium/manifests/`](../gitops/infrastructure/cilium/manifests/)).

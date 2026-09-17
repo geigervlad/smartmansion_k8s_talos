@@ -39,10 +39,9 @@ pointed at them via `externalDatabase`/`externalRedis`:
   `phpClientHttpsFix.enabled: true` tells Nextcloud to trust that and
   generate `https://` links/redirects instead of `http://`. Without this,
   login redirects and most links come out broken.
-- **Ingress**: `smartmansion.de`, via Cilium's Ingress Controller,
-  `cert-manager.io/cluster-issuer: letsencrypt-staging` by default — switch
-  to `letsencrypt-prod` once you've confirmed staging issues cleanly (see
-  [`09-cert-manager-dns.md`](09-cert-manager-dns.md)).
+- **Ingress**: `nextcloud.localhost`, via Cilium's Ingress Controller,
+  `cert-manager.io/cluster-issuer: smartmansion-internal` (the self-signed
+  internal CA — see [`09-cert-manager-dns.md`](09-cert-manager-dns.md)).
 - **Credentials**: `nextcloud-secrets` (in
   [`gitops/sealed-secrets/`](../gitops/sealed-secrets/), sealed by
   `scripts/09-generate-app-secrets.sh` — see
@@ -61,7 +60,9 @@ pointed at them via `externalDatabase`/`externalRedis`:
 cat secrets-vault/app-secrets.env | grep NEXTCLOUD_ADMIN_PASSWORD
 ```
 
-Username is `admin`. Log in at `https://smartmansion.de`.
+Username is `admin`. Log in at `https://nextcloud.localhost` (needs
+`scripts/11-configure-hosts.sh` to have run — see
+[`09-cert-manager-dns.md`](09-cert-manager-dns.md)).
 
 ## Connecting OnlyOffice
 

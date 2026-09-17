@@ -1,11 +1,11 @@
 # The single "app of apps" — this is the only Application ever applied by
 # hand (scripts/10-bootstrap-argocd-apps.sh does it once via `kubectl
 # apply`). It recursively watches gitops/ for every other Application
-# manifest (cilium, cert-manager (+ its config), local-path-provisioner,
-# sealed-secrets (the controller) + sealed-secrets-data (every generated
-# SealedSecret, see gitops/sealed-secrets/), dyndns-updater, nextcloud,
-# onlyoffice, homeassistant) and keeps them in sync — that's the entire
-# GitOps bootstrap.
+# manifest (cilium (+ its LB-IPAM/L2 config), cert-manager (+ its config),
+# local-path-provisioner, sealed-secrets (the controller) +
+# sealed-secrets-data (every generated SealedSecret, see
+# gitops/sealed-secrets/), nextcloud, onlyoffice, homeassistant) and keeps
+# them in sync — that's the entire GitOps bootstrap.
 #
 # `include: "**/application*.yaml"` deliberately matches every file named
 # application.yaml / application-config.yaml / application-<name>.yaml, so

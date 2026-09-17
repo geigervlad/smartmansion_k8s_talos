@@ -55,13 +55,6 @@ confirm() {
   [[ "${reply}" =~ ^[Yy]$ ]]
 }
 
-pause_for_manual_step() {
-  # Blocks until the user confirms they've completed an out-of-band step
-  # (e.g. adding DNS records in the Strato panel) that this script cannot do.
-  local prompt="${1:-Press Enter once you have completed the step above.}"
-  read -r -p "${prompt} " _ || true
-}
-
 require_cmd() {
   local missing=()
   for c in "$@"; do

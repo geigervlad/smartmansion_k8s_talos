@@ -26,10 +26,10 @@ for the `fromEntities: [ingress]` feature below) that:
   explicitly allowed (`endpointSelector: {}` with only listed `ingress`
   rules matching).
 - **Allows traffic from Cilium's own Ingress Controller** via
-  `fromEntities: [ingress]` — this is how `https://smartmansion.de` actually
+  `fromEntities: [ingress]` — this is how `https://nextcloud.localhost` actually
   reaches the Nextcloud pod at all.
 - **Allows same-namespace traffic** via `fromEndpoints: [{}]` — e.g. Nextcloud
-  talking to its own MariaDB pod.
+  talking to its own PostgreSQL/Redis pods.
 - **Allows specific cross-namespace traffic** where genuinely needed — e.g.
   Nextcloud ↔ OnlyOffice, for the WOPI document-editing callback, matched via
   Cilium's reserved `k8s:io.kubernetes.pod.namespace` label.

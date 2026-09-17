@@ -30,10 +30,10 @@ gitops/infrastructure/sealed-secrets/pub-cert.pem`).
 
 ## Where they live
 
-Every generated `SealedSecret` — infrastructure credentials (deSEC token,
-Strato DynDNS login) and app secrets (Nextcloud, OnlyOffice) alike — lands in
-one folder: [`gitops/sealed-secrets/`](../gitops/sealed-secrets/), synced by
-its own `sealed-secrets-data` Application
+Every generated `SealedSecret` — currently just the Nextcloud and OnlyOffice
+app secrets, see `scripts/09-generate-app-secrets.sh` — lands in one folder:
+[`gitops/sealed-secrets/`](../gitops/sealed-secrets/), synced by its own
+`sealed-secrets-data` Application
 ([`gitops/sealed-secrets/application.yaml`](../gitops/sealed-secrets/application.yaml)),
 regardless of which namespace each one actually targets (each file's own
 `metadata.namespace` decides that). This is deliberately separate from
@@ -41,8 +41,8 @@ regardless of which namespace each one actually targets (each file's own
 *controller itself* (Helm chart values, `pub-cert.pem`) — that directory
 never contains a generated secret. Sync-wave `-4`: after the controller
 (`-5`, so the `SealedSecret` CRD and decrypting webhook already exist) and
-before anything that consumes one of these secrets (`cert-manager-config` at
-`-3`, every app at the default wave `0`).
+before every app (the default wave `0`), which is what actually consumes
+these.
 
 ## How sealing works in this repo
 
@@ -66,10 +66,9 @@ it asks you for.
 ## Rotating a secret
 
 1. Delete the relevant file from `gitops/sealed-secrets/`.
-2. Delete the corresponding line from `secrets-vault/app-secrets.env` or
-   `secrets-vault/manual-credentials.env` (whichever cached the old value).
-3. Re-run `scripts/09-generate-app-secrets.sh` — it generates/prompts for a
-   fresh value and re-seals.
+2. Delete the corresponding line from `secrets-vault/app-secrets.env`.
+3. Re-run `scripts/09-generate-app-secrets.sh` — it generates a fresh value
+   and re-seals.
 4. Commit, push, let ArgoCD sync. Restart the affected pod if it doesn't
    pick up the new env var automatically.
 
