@@ -14,7 +14,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "-5"
 spec:
-  project: default
+  project: sealed-secrets
   sources:
     - repoURL: https://bitnami.github.io/sealed-secrets
       chart: sealed-secrets
@@ -25,6 +25,11 @@ spec:
     - repoURL: https://github.com/geigervlad/Smartmansion_k8s_talos.git
       targetRevision: main
       ref: values
+    - repoURL: https://github.com/geigervlad/Smartmansion_k8s_talos.git
+      targetRevision: main
+      path: gitops/infrastructure/sealed-secrets
+      directory:
+        exclude: "{values.yaml,application.yaml,pub-cert.pem}"
   destination:
     server: https://kubernetes.default.svc
     namespace: sealed-secrets

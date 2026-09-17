@@ -474,6 +474,124 @@ so it was removed outright:
   `curl --resolve` — that flag masks exactly this failure) and how to swap
   to yet another suffix if `.lan` ever causes trouble on a specific network.
 
+## Security hardening pass (2026-09)
+
+A full audit (RBAC, NetworkPolicy coverage, pod hardening, image pinning,
+known CVEs against every pinned version) turned up a list of gaps — fixes
+below, verified live against the running cluster, not just written and
+hoped for.
+
+**ArgoCD's blast radius — AppProject per Application, least privilege**
+- Every Application in this repo used to run under ArgoCD's built-in
+  `default` project, which has no restrictions at all — any Application
+  could in principle target any namespace or create any resource Kind,
+  relying entirely on nobody making a mistake. Now every Application has
+  its own `AppProject` (`gitops/apps/*/appproject.yaml`,
+  `gitops/bootstrap/projects/infra-projects.yaml`): pinned `sourceRepos`,
+  pinned `destinations` (one namespace each), and for the three user apps
+  (nextcloud/onlyoffice/homeassistant) a tight
+  `namespaceResourceWhitelist`/`clusterResourceWhitelist` — no
+  ClusterRole/ClusterRoleBinding/Role/RoleBinding of any kind is
+  whitelisted for them, confirmed by live test (an Application scoped to
+  the `onlyoffice` project, pointed at manifests that included a
+  ClusterRole/ClusterRoleBinding/StorageClass, was rejected outright:
+  `"resource rbac.authorization.k8s.io:ClusterRole is not permitted in
+  project onlyoffice"`).
+- **Deliberately not touched**: the underlying `argocd-application-controller`
+  ClusterRole itself (`apiGroups:["*"] resources:["*"] verbs:["*"]`, i.e.
+  cluster-admin-equivalent). AppProject enforcement happens inside the
+  ArgoCD controller before it ever calls the K8s API, which is real
+  protection — but the ServiceAccount underneath is still that broad.
+  Hand-scoping the Helm chart's own RBAC template was considered and
+  rejected: it's fully chart-managed, would need constant upkeep across
+  chart upgrades, and a mistake there risks breaking ArgoCD's ability to
+  manage anything, with no easy way back except reinstalling by hand. The
+  infra-component AppProjects (Cilium, cert-manager, SealedSecrets,
+  local-path-provisioner, ArgoCD itself) are deliberately left with a broad
+  Kind whitelist for the same reason these are already trusted,
+  cluster-privileged components by necessity — the real value there is the
+  `sourceRepos`/`destinations` pinning, not Kind restriction.
+
+**Pod hardening — securityContext added everywhere it was missing, verified
+live per workload, not assumed**
+- `nextcloud-postgresql` (`postgresql.yaml`) and `nextcloud-redis`
+  (`redis.yaml`): full non-root (`runAsNonRoot: true`, the image's own
+  UID/GID — 999:999 for postgres, 999:1000 for valkey — confirmed via
+  `/etc/passwd` inside each image, not guessed), `allowPrivilegeEscalation:
+  false`, all capabilities dropped. Needed a `fix-permissions` init
+  container (runs once as root, `chown`s the PVC to the right UID) because
+  the existing volumes were created while these ran as root — first attempt
+  tried granting the main container `CAP_CHOWN`/`CAP_FOWNER` instead of a
+  separate init step and that **did not work** (`chown: Permission denied`
+  even with those capabilities explicitly added back after `drop: [ALL]`)
+  — worth knowing if you ever touch this again.
+- `nextcloud` (the chart) and `onlyoffice`/`homeassistant`: **moderate**
+  hardening only (`allowPrivilegeEscalation: false` + capability drop to a
+  specific allow-list), not full non-root. Full non-root was tried on
+  Nextcloud first, using the chart's own documented example
+  (`runAsUser: 33`/www-data + `NET_BIND_SERVICE`) — confirmed broken live:
+  `entrypoint.sh: cannot create /usr/local/etc/php/conf.d/redis-session.ini:
+  Permission denied`, because the image's entrypoint writes PHP config into
+  its own image filesystem on every start, not just into mounted volumes.
+  Not worth chasing further for an app real people access daily; the
+  moderate tier still removes every capability none of these images
+  actually use.
+
+**NetworkPolicy coverage extended to argocd, sealed-secrets,
+local-path-storage — cert-manager attempted and reverted**
+- `argocd`, `sealed-secrets`, `local-path-storage` previously had no
+  `CiliumNetworkPolicy` at all (unrestricted pod-to-pod ingress). All three
+  now have one, same `fromEntities: [ingress]` + `fromEndpoints: [{}]`
+  pattern as the app namespaces — each verified live (ArgoCD UI still
+  reachable and `argocd app list` still resolves diffs correctly;
+  SealedSecrets still unseals; a real PVC-provisioning cycle, PVC → pod →
+  Bound, still works end to end).
+- **cert-manager was attempted and reverted.** Adding any ingress-restricting
+  `CiliumNetworkPolicy` there — tried both `fromEntities: [kube-apiserver]`
+  and `fromEntities: [host]` — made `kubectl apply` on any `Certificate`
+  object hang indefinitely. `hubble observe` on the webhook pod's own node
+  showed kubelet health-check traffic being allowed fine, but never showed
+  the actual admission-webhook call (port 10250) arriving at all, allowed
+  or denied — consistent with something upstream of the pod's own policy
+  enforcement, quite possibly a Talos-specific quirk in how its
+  hostNetwork'd, static-pod kube-apiserver gets identified by Cilium.
+  Confirmed removing the policy immediately restores normal Certificate
+  create/update. Left cert-manager **without** a NetworkPolicy rather than
+  ship something that silently breaks certificate issuance/renewal
+  cluster-wide — this needs real investigation (ideally on a test cluster,
+  not the one actually serving traffic) before trying again.
+- `kube-system` and `cilium-secrets` were deliberately left alone entirely:
+  `cilium-secrets` has no pods to protect, and `kube-system` hosts CoreDNS
+  (which every namespace in the cluster must be able to reach) plus
+  Cilium's own agents — the blast radius of a mistake there is "every pod
+  loses DNS," for very little actual gain since Cilium's own components
+  need broad access to function as the CNI in the first place.
+
+**Unpinned images fixed**
+- `docker.io/library/busybox` (local-path-provisioner's per-PV helper
+  pod) → `busybox:1.38.0`.
+- `mikefarah/yq:4` (Home Assistant chart's init container, floating on the
+  major version only) → `mikefarah/yq:4.53.6`.
+
+**ArgoCD's unused Dex removed**
+- `dex.enabled: false` — this project only ever uses ArgoCD's local admin
+  account, never SSO. Verified clean on chart 10.9.1 (a known historical bug
+  where disabling Dex left argocd-server trying to mount a
+  now-nonexistent TLS secret does not reproduce here: no crash,
+  argocd-server logs show `sso: false`). **Redis was not removed** — unlike
+  Dex it's a hard dependency (repo-server/controller manifest caching), not
+  optional; the chart's own docs confirm `redis.enabled: false` requires
+  pointing at an external Redis instead of just doing without one.
+
+**Egress is still unrestricted everywhere (deliberately deferred, not
+fixed)** — every `CiliumNetworkPolicy` in this repo, old and new, only
+restricts ingress. A compromised pod in any namespace can still reach the
+internet or scan the rest of the LAN freely. Locking this down needs an
+explicit default-deny-egress-plus-allowlist per namespace (DNS to
+kube-system, image registries, each app's actual real dependencies) — real
+design work, not a quick follow-on to this pass, and skipped here rather
+than rushed.
+
 ## SealedSecrets
 
 **`scripts/05-install-sealed-secrets.sh` fails with `Error: no repositories

@@ -6,6 +6,17 @@ configs:
   params:
     server.insecure: true   # TLS is terminated at the Cilium Ingress below
 
+# Dex (SSO/OIDC) is unused — this project only ever uses ArgoCD's local
+# admin account, never an external identity provider. Disabling it removes
+# a whole running, unreviewed component (verified clean on chart 10.9.1: no
+# crash, argocd-server logs show "sso: false", nothing else depended on it).
+# NOT disabling redis alongside it — unlike Dex, redis is a hard dependency
+# (repo-server/controller manifest caching), not optional; the chart's own
+# docs confirm redis.enabled=false requires pointing at an external Redis
+# instead, it doesn't just remove a nice-to-have.
+dex:
+  enabled: false
+
 server:
   ingress:
     enabled: true

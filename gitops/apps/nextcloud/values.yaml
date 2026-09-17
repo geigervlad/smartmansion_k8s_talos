@@ -18,6 +18,22 @@ nextcloud:
     secretName: nextcloud-secrets
     usernameKey: nextcloud-username
     passwordKey: nextcloud-password
+  # Moderate hardening, not full non-root: tried the chart's own documented
+  # non-root example (runAsUser: 33/www-data + NET_BIND_SERVICE) and it
+  # doesn't actually work on this image/chart combination — confirmed live,
+  # entrypoint.sh crashes on "cannot create
+  # /usr/local/etc/php/conf.d/redis-session.ini: Permission denied" (it
+  # writes PHP config into the image's own filesystem at every startup, not
+  # just into mounted volumes, which non-root can't do without DAC_OVERRIDE
+  # — at which point you've mostly defeated the point). Settling for: no
+  # privilege escalation beyond what's already granted, every Linux
+  # capability dropped except what apache/the entrypoint's own startup
+  # writes actually need.
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+      add: ["CHOWN", "SETUID", "SETGID", "DAC_OVERRIDE", "FOWNER", "NET_BIND_SERVICE"]
 
 # TLS is terminated at the Cilium Ingress, not by the Nextcloud pod itself —
 # without this, Nextcloud thinks every request is plain HTTP and generates

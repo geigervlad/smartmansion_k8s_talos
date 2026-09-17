@@ -1,0 +1,27 @@
+# Default-deny ingress for the argocd namespace, with explicit allows — same
+# pattern as gitops/apps/*/network-policy.yaml. Previously had NO policy at
+# all (unrestricted pod-to-pod access into the namespace holding ArgoCD's
+# git credentials and its cluster-admin-equivalent ServiceAccount).
+#
+# fromEntities: [ingress] is Cilium's own identity for traffic arriving via
+# its built-in Ingress Controller — this is what lets https://argocd.lan
+# reach argocd-server at all.
+# fromEndpoints: [{}] allows same-namespace traffic — argocd-server,
+# argocd-repo-server, argocd-redis, argocd-application-controller,
+# argocd-applicationset-controller and argocd-notifications-controller all
+# talk to each other constantly.
+# No cross-namespace ingress: ArgoCD doesn't register any admission webhook
+# the kube-apiserver would need to call into (unlike cert-manager, see
+# gitops/infrastructure/cert-manager/network-policy.yaml).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: argocd-allow
+  namespace: argocd
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEntities:
+        - ingress
+    - fromEndpoints:
+        - {}

@@ -1,0 +1,35 @@
+# Scopes the homeassistant Application to exactly what it needs — same
+# reasoning as gitops/apps/nextcloud/appproject.yaml. Kind list verified
+# against what's actually live in the namespace, not guessed from the
+# chart's templates.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: homeassistant
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-11"
+spec:
+  description: Home Assistant — pajikos chart + values, homeassistant namespace only
+  sourceRepos:
+    - https://pajikos.github.io/home-assistant-helm-chart/
+    - https://github.com/geigervlad/Smartmansion_k8s_talos.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: homeassistant
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ServiceAccount
+    - group: ""
+      kind: ConfigMap
+    - group: apps
+      kind: StatefulSet
+    - group: networking.k8s.io
+      kind: Ingress
+    - group: cilium.io
+      kind: CiliumNetworkPolicy

@@ -24,6 +24,22 @@ image:
 hostNetwork: true
 dnsPolicy: ClusterFirstWithHostNet   # keep using cluster DNS despite hostNetwork
 
+# Moderate hardening: hostNetwork already makes this the most privileged
+# workload in the cluster by design (see the block above) — this doesn't
+# change that, it just means an exploit inside the container itself can't
+# also escalate privilege or use a capability it never needed in the first
+# place. Not full non-root: the HA container image's own init/supervisor
+# scripts expect root (chown-ing /config on first boot, permission fixes
+# for add-on-style device access this deployment doesn't currently use but
+# the base image still assumes), same class of tradeoff as nextcloud/
+# onlyoffice — see gitops/apps/nextcloud/values.yaml for why that was
+# tried and abandoned for the apache image specifically.
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+    add: ["CHOWN", "SETUID", "SETGID", "DAC_OVERRIDE", "FOWNER"]
+
 persistence:
   enabled: true
   storageClass: local-path
@@ -39,6 +55,11 @@ persistence:
 # by hand once, see docu/07-homeassistant.md).
 configuration:
   enabled: true
+  # Chart default is "mikefarah/yq:4" — floating on the major version only,
+  # silently pulling newer 4.x builds with no corresponding change in this
+  # repo. Pinned to an exact patch release instead.
+  initContainer:
+    image: mikefarah/yq:4.53.6
 
 ingress:
   enabled: true

@@ -5,13 +5,48 @@
 There is exactly one Application ever applied by hand:
 [`gitops/bootstrap/root-app.yaml`](../gitops/bootstrap/root-app.yaml), by
 `scripts/10-bootstrap-argocd-apps.sh`. It watches the whole `gitops/`
-directory recursively but only picks up files matching `**/application*.yaml`
-(`directory.include`) — i.e. exactly the `application.yaml` /
-`application-config.yaml` files colocated with each component, never the
-`values.yaml` / `namespace.yaml` / `sealed-secret.yaml` / raw manifests
-sitting next to them. Those get synced by the *child* Applications that
-root-app creates, into their own destinations — root-app itself only ever
-creates more `Application` resources in the `argocd` namespace.
+directory recursively and picks up every file matching
+`**/{application*,appproject,infra-projects}.yaml` (`directory.include`) —
+the `application.yaml`/`application-config.yaml` files colocated with each
+component, plus every `AppProject` (see "Least privilege per Application"
+below) — never the `values.yaml` / `namespace.yaml` / `sealed-secret.yaml` /
+raw manifests sitting next to them. Those get synced by the *child*
+Applications that root-app creates, into their own destinations — root-app
+itself only ever creates `Application`/`AppProject` resources in the
+`argocd` namespace.
+
+## Least privilege per Application
+
+Every Application runs under its own dedicated `AppProject`
+(`gitops/apps/*/appproject.yaml` for the three user apps,
+`gitops/bootstrap/projects/infra-projects.yaml` for everything
+infrastructure) instead of ArgoCD's built-in `default` project, which has
+no restrictions at all. Each project pins `sourceRepos` (only the exact
+Helm/git repos that Application actually uses) and `destinations` (one
+namespace, never more). The three app projects go further with a tight
+`namespaceResourceWhitelist`: nextcloud/onlyoffice/homeassistant can never
+create a ClusterRole, RoleBinding, or any other RBAC object, even if a
+future chart bump or a compromised upstream tried to sneak one in — verified
+live, not just written: an Application deliberately pointed at manifests
+containing a ClusterRole/ClusterRoleBinding under the `onlyoffice` project
+was rejected with `"resource rbac.authorization.k8s.io:ClusterRole is not
+permitted in project onlyoffice"`.
+
+The infrastructure projects (Cilium, cert-manager, SealedSecrets,
+local-path-provisioner, ArgoCD itself) keep a broad resource-Kind whitelist
+on purpose — they're already trusted, cluster-privileged components by
+necessity (Cilium alone ships 20+ CRDs and cluster-scoped RBAC just to
+function as the CNI), so the real protection for those is the
+`sourceRepos`/`destinations` pinning, not a Kind list that would need
+constant upkeep across chart upgrades for near-zero actual gain. Also
+deliberately **not** touched: the underlying `argocd-application-controller`
+ClusterRole itself, which the chart sets to `apiGroups:["*"]
+resources:["*"] verbs:["*"]` (cluster-admin-equivalent) by default —
+AppProject enforcement happens inside ArgoCD before it ever calls the K8s
+API, which is real protection, but hand-scoping the chart's own RBAC
+template risks breaking ArgoCD's ability to manage anything on a mistake,
+with no easy way back. See
+[`11-troubleshooting.md`](11-troubleshooting.md) for the full reasoning.
 
 ```
 root-app.yaml

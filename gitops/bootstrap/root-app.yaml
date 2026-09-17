@@ -9,14 +9,20 @@
 # nextcloud, onlyoffice, homeassistant) and keeps them in sync — that's the
 # entire GitOps bootstrap.
 #
-# `include: "**/application*.yaml"` deliberately matches every file named
-# application.yaml / application-config.yaml / application-<name>.yaml, so
-# it picks up exactly the Application manifests colocated with each
-# component and ignores their values.yaml / namespace.yaml /
-# sealed-secret*.yaml / raw manifests (those are synced by the child
-# Applications themselves, into their own destinations, not by this root
-# app — each such directory's own Application excludes these same
-# application*.yaml files from its directory-sync source for that reason).
+# `include: "**/{application*,appproject,infra-projects}.yaml"` deliberately
+# matches every file named application.yaml / application-config.yaml /
+# application-<name>.yaml / appproject.yaml / infra-projects.yaml, so it
+# picks up exactly the Application manifests colocated with each component
+# plus every AppProject (the per-app ones, each named appproject.yaml next
+# to the Application it scopes — see gitops/apps/*/appproject.yaml — and
+# gitops/bootstrap/projects/infra-projects.yaml, one file for every
+# infrastructure component's AppProject, since those aren't colocated
+# 1:1 with a single Application file the way the app-level ones are).
+# Ignores values.yaml / namespace.yaml / sealed-secret*.yaml / raw manifests
+# (those are synced by the child Applications themselves, into their own
+# destinations, not by this root app — each such directory's own
+# Application excludes these same files from its directory-sync source for
+# that reason).
 #
 # repoURL below is already set to this project's GitHub repo. If you fork or
 # rename it, update GITOPS_REPO_URL in config/cluster.env and re-run
@@ -34,7 +40,7 @@ spec:
     path: gitops
     directory:
       recurse: true
-      include: "**/application*.yaml"
+      include: "**/{application*,appproject,infra-projects}.yaml"
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd

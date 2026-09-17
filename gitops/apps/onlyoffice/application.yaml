@@ -14,13 +14,13 @@ metadata:
   name: onlyoffice
   namespace: argocd
 spec:
-  project: default
+  project: onlyoffice
   source:
     repoURL: https://github.com/geigervlad/Smartmansion_k8s_talos.git
     targetRevision: main
     path: gitops/apps/onlyoffice
     directory:
-      exclude: "application.yaml"
+      exclude: "{application.yaml,appproject.yaml}"
   destination:
     server: https://kubernetes.default.svc
     namespace: onlyoffice

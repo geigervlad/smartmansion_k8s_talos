@@ -1,0 +1,31 @@
+# Scopes the onlyoffice Application to exactly what it needs — same
+# reasoning as gitops/apps/nextcloud/appproject.yaml. No Helm chart used
+# (plain manifests, see deployment.yaml), so only this repo as a source.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: onlyoffice
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-11"
+spec:
+  description: OnlyOffice — plain manifests, onlyoffice namespace only
+  sourceRepos:
+    - https://github.com/geigervlad/Smartmansion_k8s_talos.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: onlyoffice
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: PersistentVolumeClaim
+    - group: apps
+      kind: Deployment
+    - group: networking.k8s.io
+      kind: Ingress
+    - group: cilium.io
+      kind: CiliumNetworkPolicy

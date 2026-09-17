@@ -13,7 +13,7 @@ metadata:
   name: homeassistant
   namespace: argocd
 spec:
-  project: default
+  project: homeassistant
   sources:
     - repoURL: https://pajikos.github.io/home-assistant-helm-chart/
       chart: home-assistant
@@ -28,7 +28,7 @@ spec:
       targetRevision: main
       path: gitops/apps/homeassistant
       directory:
-        exclude: "{values.yaml,application.yaml}"
+        exclude: "{values.yaml,application.yaml,appproject.yaml}"
   destination:
     server: https://kubernetes.default.svc
     namespace: homeassistant

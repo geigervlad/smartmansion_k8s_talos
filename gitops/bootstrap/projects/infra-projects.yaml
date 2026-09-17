@@ -1,0 +1,149 @@
+# AppProjects for every infrastructure Application (Cilium, cert-manager,
+# SealedSecrets, local-path-provisioner, ArgoCD itself). One per component,
+# each pinned to its own repoURL(s) and destination namespace — so a
+# nextcloud-scoped compromise can't retarget an Application at, say, the
+# argocd namespace, and vice versa.
+#
+# Deliberately NOT Kind-whitelisted (clusterResourceWhitelist/
+# namespaceResourceWhitelist both left at "allow everything"): these are
+# already trusted, cluster-privileged components by necessity — Cilium
+# alone ships 20+ CRDs and cluster-scoped RBAC just to function as the CNI.
+# Trying to enumerate every Kind each of these charts might ever create and
+# keeping that list current across chart upgrades would be constant
+# friction for close to zero real security gain, since anything landing in
+# one of these projects is already meant to be cluster-privileged. The real
+# protection here is the repoURL + destination pinning — see
+# gitops/apps/*/appproject.yaml for the app-level projects, where the Kind
+# whitelist DOES do real work (nextcloud/onlyoffice/homeassistant should
+# never need a ClusterRole, and now technically can't get one).
+#
+# Sync-wave -11: before even Cilium's chart (-10) — every Application in
+# this repo references one of these projects, so they must exist first.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: cilium
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-11"
+spec:
+  description: Cilium CNI — chart + LB-IPAM/L2 config
+  sourceRepos:
+    - https://helm.cilium.io/
+    - https://github.com/geigervlad/Smartmansion_k8s_talos.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: kube-system
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: cert-manager
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-11"
+spec:
+  description: cert-manager — chart + internal CA ClusterIssuer
+  sourceRepos:
+    - https://charts.jetstack.io
+    - https://github.com/geigervlad/Smartmansion_k8s_talos.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: cert-manager
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: sealed-secrets
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-11"
+spec:
+  description: SealedSecrets controller (the chart itself, not the generated SealedSecret data — see the sealed-secrets-data project for that)
+  sourceRepos:
+    - https://bitnami.github.io/sealed-secrets
+    - https://github.com/geigervlad/Smartmansion_k8s_talos.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: sealed-secrets
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: sealed-secrets-data
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-11"
+spec:
+  description: Generated SealedSecrets (gitops/sealed-secrets/) — SealedSecret objects only, across the app namespaces that consume them.
+  sourceRepos:
+    - https://github.com/geigervlad/Smartmansion_k8s_talos.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: nextcloud
+    - server: https://kubernetes.default.svc
+      namespace: onlyoffice
+  namespaceResourceWhitelist:
+    - group: bitnami.com
+      kind: SealedSecret
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: local-path-provisioner
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-11"
+spec:
+  description: local-path-provisioner — raw vendored manifest, no Helm chart
+  sourceRepos:
+    - https://github.com/geigervlad/Smartmansion_k8s_talos.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: local-path-storage
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: argocd
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-11"
+spec:
+  description: ArgoCD adopting its own Helm release — see gitops/infrastructure/argocd/application.yaml for why this is manual-sync-only
+  sourceRepos:
+    - https://argoproj.github.io/argo-helm
+    - https://github.com/geigervlad/Smartmansion_k8s_talos.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: argocd
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

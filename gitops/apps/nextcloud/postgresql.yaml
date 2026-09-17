@@ -26,9 +26,46 @@ spec:
       labels:
         app: nextcloud-postgresql
     spec:
+      # Non-root by default (UID/GID 999, the image's own "postgres" user) —
+      # everything below exists to make that work cleanly rather than
+      # fighting the image's own root-required first-boot steps.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+      initContainers:
+        # The existing PVC's data directory was created (and, on a fresh
+        # volume, will still be created) while a previous non-hardened
+        # revision of this manifest ran as root — chown it once, every
+        # start, before the hardened main container (which can't chown its
+        # own files without CAP_CHOWN) touches it. Idempotent: a no-op once
+        # ownership is already correct.
+        - name: fix-permissions
+          image: postgres:18.6-alpine
+          command: ["sh", "-c", "chown -R 999:999 /var/lib/postgresql/data"]
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
       containers:
         - name: postgresql
           image: postgres:18.6-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          # NOTE: logs a harmless "chmod: /var/run/postgresql: Operation not
+          # permitted" on every start — that path is the container's own
+          # ephemeral filesystem (not a mounted volume), owned by root by
+          # default, and postgres's entrypoint can't chmod it without
+          # CAP_CHOWN. It falls back and serves connections fine regardless
+          # (verified: "database system is ready to accept connections"
+          # follows immediately) — not worth an emptyDir + fsGroup dance for
+          # a cosmetic log line.
           env:
             - name: POSTGRES_DB
               value: nextcloud

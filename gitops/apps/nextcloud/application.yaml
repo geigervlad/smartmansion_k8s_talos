@@ -13,7 +13,7 @@ metadata:
   name: nextcloud
   namespace: argocd
 spec:
-  project: default
+  project: nextcloud
   sources:
     - repoURL: https://nextcloud.github.io/helm/
       chart: nextcloud
@@ -28,7 +28,7 @@ spec:
       targetRevision: main
       path: gitops/apps/nextcloud
       directory:
-        exclude: "{values.yaml,application.yaml}"
+        exclude: "{values.yaml,application.yaml,appproject.yaml}"
   destination:
     server: https://kubernetes.default.svc
     namespace: nextcloud

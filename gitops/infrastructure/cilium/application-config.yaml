@@ -16,7 +16,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "-9"
 spec:
-  project: default
+  project: cilium
   source:
     repoURL: https://github.com/geigervlad/Smartmansion_k8s_talos.git
     targetRevision: main

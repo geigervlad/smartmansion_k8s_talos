@@ -1,0 +1,43 @@
+# Scopes the nextcloud Application to exactly what it needs: this repo +
+# the nextcloud Helm repo, the nextcloud namespace only, and a specific list
+# of resource Kinds. No ClusterRole/ClusterRoleBinding/RBAC of any kind is
+# whitelisted — nextcloud's Application literally cannot deploy one anymore,
+# even if a future chart bump or a compromised upstream tried to sneak one
+# in via a "helper" subchart.
+#
+# Sync-wave -11: same as every other AppProject in this repo — must exist
+# before the Application that references it
+# (gitops/apps/nextcloud/application.yaml) tries to sync.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: nextcloud
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-11"
+spec:
+  description: Nextcloud — chart + values + plain postgresql/redis manifests, nextcloud namespace only
+  sourceRepos:
+    - https://nextcloud.github.io/helm/
+    - https://github.com/geigervlad/Smartmansion_k8s_talos.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: nextcloud
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ServiceAccount
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: PersistentVolumeClaim
+    - group: apps
+      kind: Deployment
+    - group: apps
+      kind: StatefulSet
+    - group: cilium.io
+      kind: CiliumNetworkPolicy

@@ -1,0 +1,21 @@
+# Default-deny ingress for sealed-secrets, with same-namespace traffic
+# allowed. Previously had NO policy at all (unrestricted pod-to-pod access
+# into the namespace holding the private key that decrypts every secret in
+# this repo).
+#
+# No cross-namespace ingress: unlike cert-manager, sealed-secrets registers
+# no admission webhook (confirmed live —
+# `kubectl get validatingwebhookconfigurations,mutatingwebhookconfigurations`
+# shows only cert-manager-webhook in this cluster). `kubeseal --fetch-cert`
+# and friends reach it via `kubectl` port-forward/proxy, which goes through
+# the apiserver, not the pod network — not something this policy affects.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: sealed-secrets-allow
+  namespace: sealed-secrets
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - {}

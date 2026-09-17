@@ -17,7 +17,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "-3"
 spec:
-  project: default
+  project: cert-manager
   source:
     repoURL: https://github.com/geigervlad/Smartmansion_k8s_talos.git
     targetRevision: main

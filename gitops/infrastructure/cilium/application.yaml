@@ -13,7 +13,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "-10"
 spec:
-  project: default
+  project: cilium
   sources:
     - repoURL: https://helm.cilium.io/
       chart: cilium

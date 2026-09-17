@@ -41,9 +41,36 @@ spec:
       labels:
         app: nextcloud-redis
     spec:
+      # Non-root by default (UID 999 / GID 1000, the image's own "valkey"
+      # user — confirmed via the image's /etc/passwd, not assumed).
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 1000
+        fsGroup: 1000
+      initContainers:
+        # Same reasoning as gitops/apps/nextcloud/postgresql.yaml: the
+        # existing PVC's dump.rdb/appendonlydir were created while a
+        # previous non-hardened revision ran as root (0:0, mode 644) — a
+        # non-root valkey couldn't overwrite its own save files without
+        # this. Idempotent.
+        - name: fix-permissions
+          image: valkey/valkey:9.1.2-alpine
+          command: ["sh", "-c", "chown -R 999:1000 /data"]
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: data
+              mountPath: /data
       containers:
         - name: valkey
           image: valkey/valkey:9.1.2-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           command: ["sh", "-c", "exec valkey-server --requirepass \"$REDIS_PASSWORD\" --appendonly yes --dir /data"]
           env:
             - name: REDIS_PASSWORD

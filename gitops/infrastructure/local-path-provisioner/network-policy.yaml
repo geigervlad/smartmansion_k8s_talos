@@ -1,0 +1,20 @@
+# Default-deny ingress for local-path-storage, with same-namespace traffic
+# allowed. Previously had NO policy at all.
+#
+# No cross-namespace ingress: nothing calls INTO the provisioner pod from
+# another namespace — provisioning is driven entirely by the provisioner
+# itself watching PVCs/PVs via the apiserver (egress, unaffected by this
+# ingress-only policy). Its own liveness/readiness/startup probes
+# (gitops/infrastructure/local-path-provisioner/manifests.yaml) are
+# node-local kubelet checks, confirmed unaffected by the identical pattern
+# already used on every gitops/apps/*/network-policy.yaml.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: local-path-provisioner-allow
+  namespace: local-path-storage
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - {}

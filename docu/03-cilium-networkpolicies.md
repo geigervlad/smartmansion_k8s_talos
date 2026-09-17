@@ -18,7 +18,20 @@ components:
 
 ## The policy model used here
 
-Every app namespace (`nextcloud`, `onlyoffice`) gets a `CiliumNetworkPolicy`
+`nextcloud`, `onlyoffice`, `argocd`, `sealed-secrets`, and `local-path-storage`
+each get a `CiliumNetworkPolicy` — extended beyond just the app namespaces in
+a later hardening pass (see [`11-troubleshooting.md`](11-troubleshooting.md)),
+since `argocd` and `sealed-secrets` hold the two most sensitive things in
+the cluster (ArgoCD's git/cluster credentials, the SealedSecrets decryption
+key) and previously had no policy at all. **`cert-manager` and `kube-system`
+deliberately still don't** — a policy on `cert-manager` was tried and
+reverted after it broke the kube-apiserver's admission-webhook call and
+hung every `Certificate` create/update cluster-wide; `kube-system` hosts
+CoreDNS, which every namespace needs to reach, so the blast radius of a
+mistake there is far worse than the gain. See
+[`11-troubleshooting.md`](11-troubleshooting.md) for the full story on both.
+
+Every app namespace gets a `CiliumNetworkPolicy`
 (Cilium's own CRD, not plain Kubernetes `NetworkPolicy` — chosen specifically
 for the `fromEntities: [ingress]` feature below) that:
 
@@ -61,8 +74,7 @@ kubectl -n kube-system exec -it ds/cilium -- cilium policy trace \
 ```
 
 Hubble UI (enabled in `gitops/infrastructure/cilium/values.yaml`) gives a
-visual flow view:
-
-```bash
-kubectl --kubeconfig kubeconfig -n kube-system port-forward svc/hubble-ui 12000:80
-```
+visual flow view at `https://hubble.lan` (see
+[`gitops/infrastructure/cilium/manifests/hubble-ui-ingress.yaml`](../gitops/infrastructure/cilium/manifests/hubble-ui-ingress.yaml))
+— needs `scripts/11-configure-hosts.sh` to have run, same as every other
+`*.lan` app.
